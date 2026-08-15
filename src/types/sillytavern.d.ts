@@ -42,9 +42,9 @@ declare module 'st/script' {
     export function saveSettings(loopCounter?: number): Promise<void>;
     export function appendMediaToMessage(
         message: unknown,
-        media: string | string[],
-        extra: { as_attachment?: boolean; delay?: number },
-    ): Promise<void>;
+        messageElement: unknown,
+        scrollBehavior?: string,
+    ): void;
     export function getRequestHeaders(): Record<string, string>;
     export function generateQuietPrompt(prompt: string, quietToLoud: boolean, withLouded: boolean, characterName?: string): Promise<unknown>;
     export function substituteParams(content: string, replacement?: unknown): string;
@@ -53,7 +53,16 @@ declare module 'st/script' {
 
 declare module 'st/extensions' {
     export const extension_settings: Record<string, unknown>;
-    export function getContext(): unknown;
+    export function getContext(): {
+        chat: unknown[];
+        characters: unknown[];
+        characterId: number;
+        groupId: string | undefined;
+        chatId: string | undefined;
+        saveChat: () => Promise<void>;
+        extensionSettings: Record<string, unknown>;
+        [key: string]: unknown;
+    };
     export function renderExtensionTemplateAsync(
         extensionName: string,
         templateId: string,
