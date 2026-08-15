@@ -1,10 +1,13 @@
-import type { AnimaWorkflow } from '../types/comfyui.js';
-import type { AnimaGenerationParams, AnimaPromptParams } from '../types/comfyui.js';
+import type { AnimaPromptParams } from '../types/comfyui.js';
 import { buildAnimaNegative, buildAnimaPositive, extractSafetyTag } from './prompt-builder.js';
 
 /**
- * Anima workflow 模板（API 格式，节点结构与 AnimaTool 官方模板一致）。
- * 占位符 __POSITIVE__ / __NEGATIVE__ 由 buildWorkflow 注入。
+ * 提示词拼装与占位符值构造。
+ * workflow 模板本身不再硬编码——从 ComfyUI 读取用户自选的工作流
+ * （workflow-source.ts），这里只负责：
+ * 1. 把结构化提示词拼成 Anima 规范文本
+ * 2. 构造占位符替换表（%prompt% / %negative_prompt% / %sampler% / %scheduler% 等）
+ * 3. 用调用方传入的生成参数填充 seed/steps/cfg/width/height
  */
 
 const WIDTH_HEIGHT_TARGET_MP = 1.0;
@@ -31,7 +34,7 @@ const ASPECT_RATIOS: Record<string, { width: number; height: number }> = {
  * 由长宽比预设推算宽高（约 1MP，16 对齐，Anima 建议）。
  * width/height 显式给定时优先。
  */
-export function resolveDimensions(params: AnimaGenerationParams): { width: number; height: number } {
+export function resolveDimensions(params: { width?: number; height?: number; aspect_ratio?: string }): { width: number; height: number } {
     if (params.width && params.height) {
         return { width: params.width, height: params.height };
     }
@@ -41,117 +44,71 @@ export function resolveDimensions(params: AnimaGenerationParams): { width: numbe
     return ASPECT_RATIOS['1:1'];
 }
 
-/** 生成默认 workflow 模板 */
-function baseWorkflow(): AnimaWorkflow {
-    return {
-        '45': {
-            class_type: 'CLIPLoader',
-            inputs: { clip_name: 'qwen_3_06b_base.safetensors', type: 'stable_diffusion', device: 'default' },
-        },
-        '44': {
-            class_type: 'UNETLoader',
-            inputs: { unet_name: 'anima-base-v1.0.safetensors', weight_dtype: 'default' },
-        },
-        '15': {
-            class_type: 'VAELoader',
-            inputs: { vae_name: 'qwen_image_vae.safetensors' },
-        },
-        '11': {
-            class_type: 'CLIPTextEncode',
-            inputs: { clip: ['45', 0], text: '__POSITIVE__' },
-        },
-        '12': {
-            class_type: 'CLIPTextEncode',
-            inputs: { clip: ['45', 0], text: '__NEGATIVE__' },
-        },
-        '28': {
-            class_type: 'EmptyLatentImage',
-            inputs: { width: 1024, height: 1024, batch_size: 1 },
-        },
-        '19': {
-            class_type: 'KSampler',
-            inputs: {
-                model: ['44', 0],
-                positive: ['11', 0],
-                negative: ['12', 0],
-                latent_image: ['28', 0],
-                seed: -1,
-                steps: 30,
-                cfg: 4,
-                sampler_name: 'er_sde',
-                scheduler: 'simple',
-                denoise: 1.0,
-            },
-        },
-        '8': {
-            class_type: 'VAEDecode',
-            inputs: { samples: ['19', 0], vae: ['15', 0] },
-        },
-        '52': {
-            class_type: 'SaveImage',
-            inputs: { images: ['8', 0], filename_prefix: 'st-illustrator_' },
-        },
+/** 占位符键（与用户工作流约定的命名） */
+export const PLACEHOLDER = {
+    prompt: 'prompt',
+    negativePrompt: 'negative_prompt',
+    sampler: 'sampler',
+    scheduler: 'scheduler',
+    width: 'width',
+    height: 'height',
+    seed: 'seed',
+    steps: 'steps',
+    cfg: 'cfg',
+} as const;
+
+export interface PlaceholderValues {
+    /** 完整正面提示词（%prompt%） */
+    prompt?: string;
+    /** 完整负面提示词（%negative_prompt%） */
+    negative_prompt?: string;
+    /** 采样器名（%sampler%） */
+    sampler?: string;
+    /** 调度器名（%scheduler%） */
+    scheduler?: string;
+    /** 宽（%width% / 模板中 width 留空时直接注入节点） */
+    width?: number;
+    height?: number;
+    seed?: number;
+    steps?: number;
+    cfg?: number;
+    [key: string]: string | number | undefined;
+}
+
+export interface BuildPromptOptions {
+    prompt: AnimaPromptParams;
+    params: {
+        aspect_ratio?: string;
+        width?: number;
+        height?: number;
+        steps?: number;
+        cfg?: number;
+        seed?: number;
+        sampler_name?: string;
+        scheduler?: string;
     };
 }
 
-export interface BuildWorkflowOptions {
-    positive: string;
-    negative: string;
-    params: AnimaGenerationParams;
-    modelNames?: { unet?: string; clip?: string; vae?: string };
-    filenamePrefix?: string;
-}
-
 /**
- * 生成可提交的 workflow：注入提示词与生成参数。
- * 纯函数（读不到设置），模型文件名由调用方传入。
+ * 拼装提示词并构造占位符替换表。
+ * 返回值直接传给 workflow-source 的 fillPlaceholders。
  */
-export function buildWorkflow(options: BuildWorkflowOptions): AnimaWorkflow {
-    const workflow = baseWorkflow();
+export function buildPlaceholderValues(options: BuildPromptOptions): PlaceholderValues {
+    const positive = buildAnimaPositive(options.prompt);
+    const negative = buildAnimaNegative(options.prompt.neg, extractSafetyTag(options.prompt.quality_meta_year_safe));
     const { width, height } = resolveDimensions(options.params);
 
-    if (options.modelNames?.clip) {
-        workflow['45'].inputs.clip_name = options.modelNames.clip;
-    }
-    if (options.modelNames?.unet) {
-        workflow['44'].inputs.unet_name = options.modelNames.unet;
-    }
-    if (options.modelNames?.vae) {
-        workflow['15'].inputs.vae_name = options.modelNames.vae;
-    }
-
-    workflow['11'].inputs.text = options.positive;
-    workflow['12'].inputs.text = options.negative;
-    workflow['28'].inputs.width = width;
-    workflow['28'].inputs.height = height;
-
-    const sampler = workflow['19'].inputs;
-    sampler.seed = options.params.seed ?? -1;
-    sampler.steps = options.params.steps ?? 30;
-    sampler.cfg = options.params.cfg ?? 4.5;
-    if (options.params.sampler_name) {
-        sampler.sampler_name = options.params.sampler_name;
-    }
-    if (options.filenamePrefix) {
-        workflow['52'].inputs.filename_prefix = options.filenamePrefix;
-    }
-
-    return workflow;
-}
-
-/**
- * 从 Anima 结构化提示词参数 + 生成参数构建完整 workflow。
- * 便捷封装：拼装正负提示词 → 注入 workflow。
- */
-export function buildWorkflowFromParams(
-    prompt: AnimaPromptParams,
-    params: AnimaGenerationParams,
-    modelNames?: { unet?: string; clip?: string; vae?: string },
-    filenamePrefix?: string,
-): AnimaWorkflow {
-    const positive = buildAnimaPositive(prompt);
-    const negative = buildAnimaNegative(prompt.neg, extractSafetyTag(prompt.quality_meta_year_safe));
-    return buildWorkflow({ positive, negative, params, modelNames, filenamePrefix });
+    return {
+        [PLACEHOLDER.prompt]: positive,
+        [PLACEHOLDER.negativePrompt]: negative,
+        [PLACEHOLDER.sampler]: options.params.sampler_name ?? 'er_sde',
+        [PLACEHOLDER.scheduler]: options.params.scheduler ?? 'simple',
+        [PLACEHOLDER.width]: width,
+        [PLACEHOLDER.height]: height,
+        [PLACEHOLDER.seed]: options.params.seed ?? -1,
+        [PLACEHOLDER.steps]: options.params.steps ?? 30,
+        [PLACEHOLDER.cfg]: options.params.cfg ?? 4,
+    };
 }
 
 /** 1MP 目标对齐（保留给未来自定义尺寸用） */

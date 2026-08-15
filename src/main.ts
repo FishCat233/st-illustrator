@@ -3,8 +3,10 @@ import { getContext } from 'st/extensions';
 import type { StoryCharacter, StoryMessage } from './modules/extractor.js';
 import { buildPromptParams } from './modules/extractor.js';
 import { TriggerController } from './modules/triggers.js';
-import { buildWorkflowFromParams } from './modules/workflow.js';
+import { buildPlaceholderValues } from './modules/workflow.js';
+import { loadWorkflow, fillPlaceholders, hasPlaceholder } from './modules/workflow-source.js';
 import { ComfyUIGenerator } from './modules/generator.js';
+import type { AnimaWorkflow } from './types/comfyui.js';
 
 const EXTENSION_NAME = 'st-illustrator';
 
@@ -12,9 +14,9 @@ const EXTENSION_NAME = 'st-illustrator';
  * 扩展默认设置。真实设置存入 extension_settings.st_illustrator，
  * 与 ST 设置系统共用持久化。
  * 默认值对齐用户实际环境（实测 D:\1ToolAndProject\ComfyUI_windows_portable_nvidia_1）：
- * UNET 用 anima-base-v1.0（工作流 anima_v3.json 实际加载的模型），
- * 采样器 er_sde + simple（用户工作流 905 号 KSampler 参数），
- * 负面提示词用用户的实战版反咒。
+ * 工作流用用户设计的 t.json（含 %prompt% 等占位符，SaveImage 前缀 SillyTavern），
+ * 模型默认 anima-base-v1.0 + qwen_3_06b_base + qwen_image_vae，
+ * 采样器 er_sde + simple（用户工作流 KSampler 参数）。
  */
 export const defaultSettings = {
     enabled: false,
@@ -22,6 +24,7 @@ export const defaultSettings = {
     minIntervalMs: 60_000,
     messagesPerIllustration: 1,
     comfyUrl: 'http://127.0.0.1:8188',
+    workflowFile: 'workflows/t.json',
     modelUnet: 'anima-base-v1.0.safetensors',
     modelClip: 'qwen_3_06b_base.safetensors',
     modelVae: 'qwen_image_vae.safetensors',
@@ -33,6 +36,8 @@ export const defaultSettings = {
     steps: 30,
     cfg: 4,
     seed: -1,
+    samplerName: 'er_sde',
+    scheduler: 'simple',
 };
 
 export type Settings = typeof defaultSettings;
@@ -62,6 +67,65 @@ function loadSettingsFromExtensionSettings(): void {
 function getExtensionSettings(): Partial<Settings> {
     const settings = getContext()?.extensionSettings?.st_illustrator ?? {};
     return settings as Partial<Settings>;
+}
+
+/**
+ * 从设置自选的工作流构建可提交的 API 格式 workflow：
+ * 1. 从 ComfyUI 读取工作流文件（UI 格式 → API 格式）
+ * 2. 替换 %prompt% / %negative_prompt% / %sampler% / %scheduler% 占位符
+ * 3. seed/steps/cfg/width/height 直接注入对应节点（模板中留空时）
+ */
+async function buildWorkflowFromSettings(promptParams: ReturnType<typeof buildPromptParams>): Promise<AnimaWorkflow> {
+    const { workflow, defaultModels } = await loadWorkflow(currentSettings.comfyUrl, currentSettings.workflowFile);
+
+    const values = buildPlaceholderValues({
+        prompt: promptParams,
+        params: {
+            aspect_ratio: currentSettings.aspectRatio,
+            steps: currentSettings.steps,
+            cfg: currentSettings.cfg,
+            seed: currentSettings.seed,
+            sampler_name: currentSettings.samplerName,
+            scheduler: currentSettings.scheduler,
+        },
+    });
+
+    // 模型覆盖：设置面板显式填写时优先，否则用工作流里的默认模型
+    const modelNames = {
+        unet: currentSettings.modelUnet || defaultModels.unet,
+        clip: currentSettings.modelClip || defaultModels.clip,
+        vae: currentSettings.modelVae || defaultModels.vae,
+    };
+    for (const node of Object.values(workflow)) {
+        if (node.class_type === 'UNETLoader' && modelNames.unet) node.inputs.unet_name = modelNames.unet;
+        if (node.class_type === 'CLIPLoader' && modelNames.clip) node.inputs.clip_name = modelNames.clip;
+        if (node.class_type === 'VAELoader' && modelNames.vae) node.inputs.vae_name = modelNames.vae;
+    }
+
+    // 占位符替换（%prompt% 等）
+    fillPlaceholders(workflow, values);
+
+    // 模板中留空的生成参数直接注入节点（t.json 的 KSampler/EmptyLatentImage 留空由插件填）
+    for (const node of Object.values(workflow)) {
+        if (node.class_type === 'KSampler') {
+            const inputs = node.inputs;
+            if (inputs.seed === undefined || inputs.seed === null) inputs.seed = values.seed ?? -1;
+            if (inputs.steps === undefined || inputs.steps === null) inputs.steps = values.steps ?? 30;
+            if (inputs.cfg === undefined || inputs.cfg === null) inputs.cfg = values.cfg ?? 4;
+        }
+        if (node.class_type === 'EmptyLatentImage') {
+            const inputs = node.inputs;
+            if (inputs.width === undefined || inputs.width === null) inputs.width = values.width ?? 1024;
+            if (inputs.height === undefined || inputs.height === null) inputs.height = values.height ?? 1024;
+        }
+    }
+
+    // 校验：正负提示词占位符必须被替换（防用户选错工作流）
+    if (hasPlaceholder(workflow, 'prompt') || hasPlaceholder(workflow, 'negative_prompt')) {
+        throw new Error('工作流缺少 %prompt% / %negative_prompt% 占位符替换（工作流选择可能不对）');
+    }
+
+    return workflow;
 }
 
 /** 生成配图并插入目标消息 */
@@ -97,20 +161,7 @@ export async function generateIllustration(
         style: currentSettings.style,
     });
 
-    const workflow = buildWorkflowFromParams(
-        promptParams,
-        {
-            aspect_ratio: currentSettings.aspectRatio,
-            steps: currentSettings.steps,
-            cfg: currentSettings.cfg,
-            seed: currentSettings.seed,
-        },
-        {
-            unet: currentSettings.modelUnet,
-            clip: currentSettings.modelClip,
-            vae: currentSettings.modelVae,
-        },
-    );
+    const workflow = await buildWorkflowFromSettings(promptParams);
 
     console.log(`[${EXTENSION_NAME}] 生成配图（消息 ${messageIndex}）`, promptParams);
 

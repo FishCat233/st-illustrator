@@ -1,6 +1,7 @@
 import { getContext, renderExtensionTemplateAsync } from 'st/extensions';
 import { saveSettingsDebounced } from 'st/script';
 import { defaultSettings, type Settings } from '../main.js';
+import { listWorkflows } from './workflow-source.js';
 
 /**
  * 设置面板：渲染模板、读写 extension_settings、绑定控件事件。
@@ -31,6 +32,28 @@ export async function addSettingsUI(): Promise<void> {
     bindSettingsUI();
 }
 
+/** 从 ComfyUI 拉取工作流列表，填充下拉框 */
+async function loadWorkflowList(): Promise<void> {
+    const settings = getSettings();
+    const select = $('#sti_workflow_file');
+    try {
+        const files = await listWorkflows(settings.comfyUrl);
+        if (files.length === 0) {
+            select.html('<option value="">未找到工作流（确认 ComfyUI 有 workflows 目录）</option>');
+            return;
+        }
+        const current = settings.workflowFile;
+        let options = '';
+        for (const file of files) {
+            options += `<option value="${file.path}"${file.path === current ? ' selected' : ''}>${file.name}</option>`;
+        }
+        select.html(options);
+    } catch (error) {
+        select.html('<option value="">工作流列表加载失败（检查 ComfyUI 地址）</option>');
+        console.error('加载工作流列表失败:', error);
+    }
+}
+
 function bindSettingsUI(): void {
     const settings = getSettings();
 
@@ -49,6 +72,11 @@ function bindSettingsUI(): void {
     $('#sti_steps').val(settings.steps);
     $('#sti_cfg').val(settings.cfg);
     $('#sti_seed').val(settings.seed);
+    $('#sti_sampler_name').val(settings.samplerName);
+    $('#sti_scheduler').val(settings.scheduler);
+
+    // 工作流列表：从 ComfyUI 拉取
+    loadWorkflowList().catch((error) => console.error('加载工作流列表失败:', error));
 
     // 所有控件变化 → 保存
     $('#sti_enabled').on('change', () => {
@@ -124,6 +152,21 @@ function bindSettingsUI(): void {
     $('#sti_seed').on('change', () => {
         const next = getSettings();
         next.seed = Number($('#sti_seed').val());
+        setSettings(next);
+    });
+    $('#sti_workflow_file').on('change', () => {
+        const next = getSettings();
+        next.workflowFile = String($('#sti_workflow_file').val() ?? defaultSettings.workflowFile);
+        setSettings(next);
+    });
+    $('#sti_sampler_name').on('change', () => {
+        const next = getSettings();
+        next.samplerName = String($('#sti_sampler_name').val() ?? defaultSettings.samplerName);
+        setSettings(next);
+    });
+    $('#sti_scheduler').on('change', () => {
+        const next = getSettings();
+        next.scheduler = String($('#sti_scheduler').val() ?? defaultSettings.scheduler);
         setSettings(next);
     });
 

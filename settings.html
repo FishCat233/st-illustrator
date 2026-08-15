@@ -30,13 +30,19 @@
                 <label for="sti_comfy_url">ComfyUI 地址</label>
                 <input id="sti_comfy_url" type="text" class="text_pole">
 
-                <label for="sti_model_unet">UNET 模型</label>
+                <label for="sti_workflow_file">工作流（从 ComfyUI 读取）</label>
+                <select id="sti_workflow_file" class="text_pole">
+                    <option value="">加载中...</option>
+                </select>
+                <div class="muted small">在 ComfyUI 里设计工作流，用 %prompt% / %negative_prompt% / %sampler% / %scheduler% 占位符标注插件要填的位置</div>
+
+                <label for="sti_model_unet">UNET 模型（留空用工作流默认）</label>
                 <input id="sti_model_unet" type="text" class="text_pole">
 
-                <label for="sti_model_clip">CLIP 模型</label>
+                <label for="sti_model_clip">CLIP 模型（留空用工作流默认）</label>
                 <input id="sti_model_clip" type="text" class="text_pole">
 
-                <label for="sti_model_vae">VAE 模型</label>
+                <label for="sti_model_vae">VAE 模型（留空用工作流默认）</label>
                 <input id="sti_model_vae" type="text" class="text_pole">
             </div>
 
@@ -88,6 +94,23 @@
 
                 <label for="sti_seed">种子（-1 随机）</label>
                 <input id="sti_seed" type="number" class="text_pole">
+
+                <label for="sti_sampler_name">采样器</label>
+                <select id="sti_sampler_name" class="text_pole">
+                    <option value="er_sde">er_sde</option>
+                    <option value="euler">euler</option>
+                    <option value="euler_a">euler_a</option>
+                    <option value="dpmpp_2m_sde">dpmpp_2m_sde</option>
+                    <option value="dpmpp_2m_sde_gpu">dpmpp_2m_sde_gpu</option>
+                </select>
+
+                <label for="sti_scheduler">调度器</label>
+                <select id="sti_scheduler" class="text_pole">
+                    <option value="simple">simple</option>
+                    <option value="beta57">beta57</option>
+                    <option value="karras">karras</option>
+                    <option value="normal">normal</option>
+                </select>
             </div>
 
             <hr>
