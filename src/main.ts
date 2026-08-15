@@ -37,6 +37,12 @@ const trigger = new TriggerController();
 let generator = new ComfyUIGenerator({ comfyUrl: defaultSettings.comfyUrl });
 let currentSettings: Settings = { ...defaultSettings };
 
+/**
+ * 刷新设置快照。
+ * init 时与 EXTENSION_SETTINGS_LOADED 事件时都会调用；
+ * 设置面板保存后 ST 只 emit SETTINGS_UPDATED（不重发 EXTENSION_SETTINGS_LOADED），
+ * 所以每次生成前也会懒读取（见 generateIllustration），保证改动实时生效。
+ */
 function loadSettingsFromExtensionSettings(): void {
     const extensionSettings = getExtensionSettings();
     currentSettings = { ...defaultSettings, ...extensionSettings };
@@ -63,6 +69,9 @@ export async function generateIllustration(
         console.log(`[${EXTENSION_NAME}] 扩展未启用，跳过生成`);
         return false;
     }
+
+    // 懒读取设置：设置面板改动即时生效（ST 保存设置不重发 EXTENSION_SETTINGS_LOADED）
+    loadSettingsFromExtensionSettings();
 
     const context = getContext() as {
         chat: StoryMessage[];
