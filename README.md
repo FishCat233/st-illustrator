@@ -17,15 +17,23 @@
 
 ## 安装
 
-Windows 下把本项目链接到 ST 扩展目录，然后构建：
+ST 扩展管理面板 → 安装扩展 → 粘贴仓库地址：
 
-```powershell
-New-Item -ItemType Junction -Path "<SillyTavern>\public\scripts\extensions\st-illustrator" -Target "<本项目路径>"
+```
+https://github.com/FishCat233/st-illustrator.git
+```
+
+装完后需构建一次（源码是 TypeScript，构建产物不入库）：
+
+```bash
+cd <SillyTavern>/public/scripts/extensions/st-illustrator
 npm install
 npm run build
 ```
 
 重启 SillyTavern，扩展面板出现「ST Illustrator」即成功。
+
+本地开发的话可以改用 junction 链接到项目目录，改完 `npm run build` 即可生效。
 
 ## 第一次配置（1 分钟）
 
