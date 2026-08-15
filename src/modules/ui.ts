@@ -66,7 +66,11 @@ function bindSettingsUI(): void {
     $('#sti_model_vae').val(settings.modelVae);
     $('#sti_prompt_template').val(settings.promptTemplate);
     $('#sti_negative_template').val(settings.negativeTemplate);
-    $('#sti_llm_enabled').prop('checked', settings.llmEnabled);
+    $('#sti_prompt_mode').val(settings.promptMode);
+    $('#sti_scene_window').val(settings.sceneWindow);
+    $('#sti_scene_max_len').val(settings.sceneMaxLen);
+    $('#sti_scene_full_max_len').val(settings.sceneFullMaxLen);
+    $('#sti_chat_history_max_chars').val(settings.chatHistoryMaxChars);
     $('#sti_llm_base_url').val(settings.llmBaseUrl);
     $('#sti_llm_api_key').val(settings.llmApiKey);
     $('#sti_llm_model').val(settings.llmModel);
@@ -121,9 +125,29 @@ function bindSettingsUI(): void {
         next.modelVae = String($('#sti_model_vae').val() ?? '');
         setSettings(next);
     });
-    $('#sti_llm_enabled').on('change', () => {
+    $('#sti_prompt_mode').on('change', () => {
         const next = getSettings();
-        next.llmEnabled = !!$('#sti_llm_enabled').prop('checked');
+        next.promptMode = $('#sti_prompt_mode').val() === 'llm' ? 'llm' : 'template';
+        setSettings(next);
+    });
+    $('#sti_scene_window').on('change', () => {
+        const next = getSettings();
+        next.sceneWindow = Number($('#sti_scene_window').val());
+        setSettings(next);
+    });
+    $('#sti_scene_max_len').on('change', () => {
+        const next = getSettings();
+        next.sceneMaxLen = Number($('#sti_scene_max_len').val());
+        setSettings(next);
+    });
+    $('#sti_scene_full_max_len').on('change', () => {
+        const next = getSettings();
+        next.sceneFullMaxLen = Number($('#sti_scene_full_max_len').val());
+        setSettings(next);
+    });
+    $('#sti_chat_history_max_chars').on('change', () => {
+        const next = getSettings();
+        next.chatHistoryMaxChars = Number($('#sti_chat_history_max_chars').val());
         setSettings(next);
     });
     $('#sti_llm_base_url').on('change', () => {

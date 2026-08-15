@@ -29,9 +29,10 @@ export const defaultSettings = {
     modelUnet: '',
     modelClip: '',
     modelVae: '',
-    // === 提示词生成：LLM 为主，规则模板降级 ===
+    // === 提示词生成：显式选择 LLM / 规则模板，永不自动切换 ===
+    // promptMode: 'llm' | 'template'
+    promptMode: 'llm',
     // LLM API（OpenAI 兼容）
-    llmEnabled: false,
     llmBaseUrl: '',
     llmApiKey: '',
     llmModel: '',
@@ -66,7 +67,16 @@ export const defaultSettings = {
     llmPositiveSuffix: ', @fkey',
     llmNegativePrefix: 'worst quality, low quality, blurry, bad anatomy, bad hands, ',
     llmNegativeSuffix: ', nsfw, explicit',
-    // 规则模板（LLM 不可用时降级）——Anima 官方 tag order（README:61-62）：
+    // === 素材提取上限（上下文控制） ===
+    /** 素材窗口：取最近多少条消息 */
+    sceneWindow: 6,
+    /** scene 素材最大字符数 */
+    sceneMaxLen: 120,
+    /** scene_full 素材最大字符数 */
+    sceneFullMaxLen: 500,
+    /** chat_history 素材最大字符数（喂给 LLM 的对话记录） */
+    chatHistoryMaxChars: 1500,
+    // 规则模板（生成方式选 template 时用）——Anima 官方 tag order（README:61-62）：
     // [quality/meta/year/safety] [1girl] [character] [series] [artist] [general tags]
     promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, {appearance}, @fkey, {scene}',
     negativeTemplate: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, nsfw, explicit',
@@ -128,12 +138,21 @@ async function buildWorkflowFromSettings(
     const { workflow, defaultModels } = await loadWorkflow(currentSettings.comfyUrl, currentSettings.workflowFile);
 
     // 素材（upToIndex 指定时只取该消息及之前的剧情）
-    const materials = extractMaterials(character, chat, { sceneWindow: 6, sceneMaxLen: 120, upToIndex: options.upToIndex });
+    const materials = extractMaterials(character, chat, {
+        sceneWindow: currentSettings.sceneWindow,
+        sceneMaxLen: currentSettings.sceneMaxLen,
+        sceneFullMaxLen: currentSettings.sceneFullMaxLen,
+        chatHistoryMaxChars: currentSettings.chatHistoryMaxChars,
+        upToIndex: options.upToIndex,
+    });
 
-    // 提示词生成：LLM 优先（启用且配置完整时），失败降级规则模板
+    // 提示词生成：按设置的「生成方式」显式选择，永不自动切换
     let prompt: string;
     let negativePrompt: string;
-    if (currentSettings.llmEnabled && currentSettings.llmBaseUrl && currentSettings.llmModel) {
+    if (currentSettings.promptMode === 'llm') {
+        if (!currentSettings.llmBaseUrl || !currentSettings.llmModel) {
+            throw new Error('生成方式为 LLM，但 LLM 未配置（API 地址/模型名）——请到设置面板补全');
+        }
         try {
             const llmResult = await generateWithLlm({
                 client: {
@@ -150,12 +169,11 @@ async function buildWorkflowFromSettings(
             prompt = llmResult.positive;
             negativePrompt = llmResult.negative;
         } catch (error) {
-            console.warn(`[${EXTENSION_NAME}] LLM 生成失败，降级规则模板:`, error);
-            prompt = renderTemplate(currentSettings.promptTemplate, materials);
-            negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+            // 失败即报错：不降级，不静默换方案
+            console.error(`[${EXTENSION_NAME}] LLM 生成提示词失败:`, error);
+            throw new Error(`LLM 生成提示词失败: ${error instanceof Error ? error.message : String(error)}`);
         }
     } else {
-        console.log(`[${EXTENSION_NAME}] LLM 未启用或未配置（llmEnabled=${currentSettings.llmEnabled}），使用规则模板`);
         prompt = renderTemplate(currentSettings.promptTemplate, materials);
         negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
     }

@@ -50,11 +50,12 @@
 
             <h4>LLM 提示词生成（剧情 → 画面描述）</h4>
             <div class="flex-container flexFlowColumn wide100p">
-                <label class="checkbox_label" for="sti_llm_enabled">
-                    <input id="sti_llm_enabled" type="checkbox">
-                    <span>启用 LLM 生成提示词</span>
-                </label>
-                <div class="muted small">启用后由 LLM 从剧情提炼画面描述（输出 JSON positive/negative），失败自动降级规则模板</div>
+                <label for="sti_prompt_mode">生成方式</label>
+                <select id="sti_prompt_mode" class="text_pole">
+                    <option value="llm">LLM（剧情 → 画面描述）</option>
+                    <option value="template">规则模板（不调 LLM）</option>
+                </select>
+                <div class="muted small">显式选择，不会自动切换。选 LLM 时失败会直接报错，不会偷偷改用模板</div>
 
                 <label for="sti_llm_base_url">API 地址（OpenAI 兼容，如 http://127.0.0.1:11434/v1）</label>
                 <input id="sti_llm_base_url" type="text" class="text_pole">
@@ -92,6 +93,23 @@
 
                 <label for="sti_negative_template">负面模板</label>
                 <textarea id="sti_negative_template" class="text_pole" rows="3"></textarea>
+            </div>
+
+            <hr>
+
+            <h4>素材上限（上下文控制）</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_scene_window">素材窗口（取最近多少条消息）</label>
+                <input id="sti_scene_window" type="number" min="1" max="50" class="text_pole">
+
+                <label for="sti_scene_max_len">scene 最大字符数</label>
+                <input id="sti_scene_max_len" type="number" min="0" max="5000" class="text_pole">
+
+                <label for="sti_scene_full_max_len">scene_full 最大字符数</label>
+                <input id="sti_scene_full_max_len" type="number" min="0" max="10000" class="text_pole">
+
+                <label for="sti_chat_history_max_chars">chat_history 最大字符数（喂给 LLM 的对话记录）</label>
+                <input id="sti_chat_history_max_chars" type="number" min="0" max="20000" class="text_pole">
             </div>
 
             <hr>

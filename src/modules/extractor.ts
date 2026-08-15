@@ -83,16 +83,31 @@ export function extractChatHistory(chat: StoryMessage[], window: number, maxChar
 }
 
 /** 从角色卡 + 剧情提取全部素材 */
+export interface ExtractMaterialsConfig {
+    /** 素材窗口：取最近多少条消息（默认 6） */
+    sceneWindow?: number;
+    /** scene 素材最大字符数（默认 120） */
+    sceneMaxLen?: number;
+    /** scene_full 素材最大字符数（默认 500） */
+    sceneFullMaxLen?: number;
+    /** chat_history 素材最大字符数（默认 1500） */
+    chatHistoryMaxChars?: number;
+    /** 指定截至某条消息（回顾式配图） */
+    upToIndex?: number;
+}
+
 export function extractMaterials(
     character: StoryCharacter | undefined,
     chat: StoryMessage[],
-    config: { sceneWindow?: number; sceneMaxLen?: number; upToIndex?: number } = {},
+    config: ExtractMaterialsConfig = {},
 ): StoryMaterials {
     const window = config.sceneWindow ?? 6;
     const maxLen = config.sceneMaxLen ?? 120;
+    const sceneFullMaxLen = config.sceneFullMaxLen ?? 500;
+    const chatHistoryMaxChars = config.chatHistoryMaxChars ?? 1500;
     // 指定截至某条消息时，只取该消息及之前的剧情（回顾式配图）
     const context = config.upToIndex !== undefined ? chat.slice(0, config.upToIndex + 1) : chat;
-    const sceneFull = extractScene(context, window, 500);
+    const sceneFull = extractScene(context, window, sceneFullMaxLen);
 
     return {
         character: character?.name?.trim() ?? '',
@@ -101,6 +116,6 @@ export function extractMaterials(
         scenario: character?.scenario?.trim() ?? '',
         scene: sceneFull.slice(0, maxLen),
         scene_full: sceneFull,
-        chat_history: extractChatHistory(context, window, 1500),
+        chat_history: extractChatHistory(context, window, chatHistoryMaxChars),
     };
 }
