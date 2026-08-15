@@ -15,6 +15,7 @@ declare module 'st/events' {
         MESSAGE_SWIPED: string;
         CHAT_CHANGED: string;
         CHAT_LOADED: string;
+        MORE_MESSAGES_LOADED: string;
         GENERATION_STARTED: string;
         GENERATION_ENDED: string;
         GENERATION_STOPPED: string;

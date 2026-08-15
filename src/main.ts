@@ -74,13 +74,7 @@ function getExtensionSettings(): Partial<Settings> {
 
 /**
  * 从设置自选的工作流构建可提交的 API 格式 workflow：
- * 1. 从 ComfyUI 读取工作流文件（UI 格式 → API 格式）
- * 2. 替换 %prompt% / %negative_prompt% / %sampler% / %scheduler% 占位符
- * 3. seed/steps/cfg/width/height 直接注入对应节点（模板中留空时）
- */
-/**
- * 从设置自选的工作流构建可提交的 API 格式 workflow：
- * 1. 提取素材（角色卡/剧情）
+ * 1. 提取素材（角色卡/剧情，可指定截至某条消息）
  * 2. 渲染用户模板（{素材} → 提示词）
  * 3. 从 ComfyUI 读取工作流（UI 格式 → API 格式）
  * 4. 替换工作流中的 %占位符%（prompt/negative_prompt/seed/steps/cfg/sampler/scheduler/width/height）
@@ -89,11 +83,12 @@ function getExtensionSettings(): Partial<Settings> {
 async function buildWorkflowFromSettings(
     character: StoryCharacter | undefined,
     chat: StoryMessage[],
+    options: { upToIndex?: number } = {},
 ): Promise<AnimaWorkflow> {
     const { workflow, defaultModels } = await loadWorkflow(currentSettings.comfyUrl, currentSettings.workflowFile);
 
-    // 素材 → 模板 → 提示词
-    const materials = extractMaterials(character, chat, { sceneWindow: 6, sceneMaxLen: 120 });
+    // 素材 → 模板 → 提示词（upToIndex 指定时只取该消息及之前的剧情）
+    const materials = extractMaterials(character, chat, { sceneWindow: 6, sceneMaxLen: 120, upToIndex: options.upToIndex });
     const prompt = renderTemplate(currentSettings.promptTemplate, materials);
     const negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
 
@@ -164,7 +159,8 @@ export async function generateIllustration(
     if (!options.force && !trigger.shouldAutoTrigger(messageIndex)) return false;
 
     const character = context.characters?.[context.characterId];
-    const workflow = await buildWorkflowFromSettings(character, context.chat);
+    // 素材截至目标消息：配图描述的是「那条消息当时」的场景
+    const workflow = await buildWorkflowFromSettings(character, context.chat, { upToIndex: messageIndex });
 
     console.log(`[${EXTENSION_NAME}] 生成配图（消息 ${messageIndex}）`);
 
@@ -176,6 +172,14 @@ export async function generateIllustration(
     trigger.markGenerated(messageIndex);
     await context.saveChat();
     return true;
+}
+
+/**
+ * 为指定消息配图（消息菜单按钮入口）。
+ * 绕过启用/触发检查：用户明确点按钮就是要配图。
+ */
+export async function illustrateMessage(messageIndex: number): Promise<boolean> {
+    return generateIllustration(messageIndex, { force: true, bypassEnabled: true });
 }
 
 async function insertImageIntoMessage(messageIndex: number, image: { filename: string; type?: string; subfolder?: string }): Promise<void> {
@@ -228,6 +232,10 @@ export async function init(): Promise<void> {
     loadSettingsFromExtensionSettings();
     eventSource.on(event_types.EXTENSION_SETTINGS_LOADED, loadSettingsFromExtensionSettings);
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+
+    // 消息菜单配图按钮（渲染事件注入 + 点击委托）
+    const { initMessageButtons } = await import('./modules/message-buttons.js');
+    initMessageButtons();
 
     // 设置面板等 DOM 就绪后再渲染（ST 扩展加载早于 DOM 完成）
     const { addSettingsUI } = await import('./modules/ui.js');

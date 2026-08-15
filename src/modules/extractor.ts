@@ -64,11 +64,13 @@ export function extractScene(chat: StoryMessage[], window: number, maxLen: numbe
 export function extractMaterials(
     character: StoryCharacter | undefined,
     chat: StoryMessage[],
-    config: { sceneWindow?: number; sceneMaxLen?: number } = {},
+    config: { sceneWindow?: number; sceneMaxLen?: number; upToIndex?: number } = {},
 ): StoryMaterials {
     const window = config.sceneWindow ?? 6;
     const maxLen = config.sceneMaxLen ?? 120;
-    const sceneFull = extractScene(chat, window, 500);
+    // 指定截至某条消息时，只取该消息及之前的剧情（回顾式配图）
+    const context = config.upToIndex !== undefined ? chat.slice(0, config.upToIndex + 1) : chat;
+    const sceneFull = extractScene(context, window, 500);
 
     return {
         character: character?.name?.trim() ?? '',
