@@ -11,6 +11,10 @@ const EXTENSION_NAME = 'st-illustrator';
 /**
  * 扩展默认设置。真实设置存入 extension_settings.st_illustrator，
  * 与 ST 设置系统共用持久化。
+ * 默认值对齐用户实际环境（实测 D:\1ToolAndProject\ComfyUI_windows_portable_nvidia_1）：
+ * UNET 用 anima-base-v1.0（工作流 anima_v3.json 实际加载的模型），
+ * 采样器 er_sde + simple（用户工作流 905 号 KSampler 参数），
+ * 负面提示词用用户的实战版反咒。
  */
 export const defaultSettings = {
     enabled: false,
@@ -18,16 +22,16 @@ export const defaultSettings = {
     minIntervalMs: 60_000,
     messagesPerIllustration: 1,
     comfyUrl: 'http://127.0.0.1:8188',
-    modelUnet: 'anima-preview.safetensors',
+    modelUnet: 'anima-base-v1.0.safetensors',
     modelClip: 'qwen_3_06b_base.safetensors',
     modelVae: 'qwen_image_vae.safetensors',
     artist: '@fkey',
-    qualityMetaYearSafe: 'masterpiece, best quality, newest, year 2024, safe',
-    neg: 'worst quality, low quality, blurry, bad anatomy, bad hands, bad feet, extra fingers, missing fingers, malformed limbs, text, watermark, logo, nsfw, explicit',
+    qualityMetaYearSafe: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe',
+    neg: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, red sleeves, red sleeve cuffs, nsfw, explicit',
     style: '',
-    aspectRatio: '1:1',
+    aspectRatio: '2:3',
     steps: 30,
-    cfg: 4.5,
+    cfg: 4,
     seed: -1,
 };
 

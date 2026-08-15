@@ -50,7 +50,7 @@ function baseWorkflow(): AnimaWorkflow {
         },
         '44': {
             class_type: 'UNETLoader',
-            inputs: { unet_name: 'anima-preview.safetensors', weight_dtype: 'default' },
+            inputs: { unet_name: 'anima-base-v1.0.safetensors', weight_dtype: 'default' },
         },
         '15': {
             class_type: 'VAELoader',
@@ -77,7 +77,7 @@ function baseWorkflow(): AnimaWorkflow {
                 latent_image: ['28', 0],
                 seed: -1,
                 steps: 30,
-                cfg: 4.5,
+                cfg: 4,
                 sampler_name: 'er_sde',
                 scheduler: 'simple',
                 denoise: 1.0,
