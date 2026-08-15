@@ -28,7 +28,10 @@ export const defaultSettings = {
     modelUnet: '',
     modelClip: '',
     modelVae: '',
-    promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, @fkey, {appearance}, {scene}',
+    // Anima 官方 tag order（README:61-62）：
+    // [quality/meta/year/safety] [1girl] [character] [series] [artist] [general tags]
+    // 画师必须在 character 之后、general tags 之前
+    promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, {appearance}, @fkey, {scene}',
     negativeTemplate: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, nsfw, explicit',
     aspectRatio: '2:3',
     steps: 30,
