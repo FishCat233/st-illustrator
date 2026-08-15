@@ -206,9 +206,13 @@ async function insertImageIntoMessage(messageIndex: number, image: { filename: s
     messageExtra.inline_image = true;
     message.extra = messageExtra;
 
+    console.log(`[${EXTENSION_NAME}] 插入配图到消息 ${messageIndex}`, { url, mediaCount: media.length });
+
     const messageElement = document.querySelector(`.mes[mesid="${messageIndex}"]`);
     if (messageElement) {
-        appendMediaToMessage(message, messageElement as never, 'keep');
+        appendMediaToMessage(message, $(messageElement), 'keep');
+    } else {
+        console.warn(`[${EXTENSION_NAME}] 消息 ${messageIndex} 的 DOM 元素未找到，图片已保存到消息数据但未渲染（刷新页面可见）`);
     }
 }
 
