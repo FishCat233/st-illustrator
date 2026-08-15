@@ -48,7 +48,43 @@
 
             <hr>
 
-            <h4>提示词模板</h4>
+            <h4>LLM 提示词生成（剧情 → 画面描述）</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label class="checkbox_label" for="sti_llm_enabled">
+                    <input id="sti_llm_enabled" type="checkbox">
+                    <span>启用 LLM 生成提示词</span>
+                </label>
+                <div class="muted small">启用后由 LLM 从剧情提炼画面描述（输出 JSON positive/negative），失败自动降级规则模板</div>
+
+                <label for="sti_llm_base_url">API 地址（OpenAI 兼容，如 http://127.0.0.1:11434/v1）</label>
+                <input id="sti_llm_base_url" type="text" class="text_pole">
+
+                <label for="sti_llm_api_key">API Key（本地服务可留空）</label>
+                <input id="sti_llm_api_key" type="text" class="text_pole">
+
+                <label for="sti_llm_model">模型名</label>
+                <input id="sti_llm_model" type="text" class="text_pole">
+
+                <label for="sti_llm_template">LLM 提示词模板</label>
+                <textarea id="sti_llm_template" class="text_pole" rows="6"></textarea>
+                <div class="muted small">可用 {character} {appearance} {personality} {scenario} {scene} 或 {materials}（完整 JSON）</div>
+
+                <label for="sti_llm_positive_prefix">正面前缀（注入 LLM 结果开头）</label>
+                <input id="sti_llm_positive_prefix" type="text" class="text_pole">
+
+                <label for="sti_llm_positive_suffix">正面后缀（注入 LLM 结果结尾）</label>
+                <input id="sti_llm_positive_suffix" type="text" class="text_pole">
+
+                <label for="sti_llm_negative_prefix">负面前缀</label>
+                <input id="sti_llm_negative_prefix" type="text" class="text_pole">
+
+                <label for="sti_llm_negative_suffix">负面后缀</label>
+                <input id="sti_llm_negative_suffix" type="text" class="text_pole">
+            </div>
+
+            <hr>
+
+            <h4>提示词模板（LLM 降级方案）</h4>
             <div class="flex-container flexFlowColumn wide100p">
                 <label for="sti_prompt_template">正面模板</label>
                 <textarea id="sti_prompt_template" class="text_pole" rows="3"></textarea>

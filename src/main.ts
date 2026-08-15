@@ -4,6 +4,7 @@ import type { StoryCharacter, StoryMessage } from './modules/extractor.js';
 import { extractMaterials } from './modules/extractor.js';
 import { TriggerController } from './modules/triggers.js';
 import { renderTemplate, buildParamPlaceholders } from './modules/workflow.js';
+import { generateWithLlm } from './modules/prompt-llm.js';
 import { loadWorkflow, fillPlaceholders, fillMissingParams, hasUnresolvedPlaceholders } from './modules/workflow-source.js';
 import { ComfyUIGenerator } from './modules/generator.js';
 import { resetProxyProbe } from './modules/comfy-fetch.js';
@@ -28,9 +29,21 @@ export const defaultSettings = {
     modelUnet: '',
     modelClip: '',
     modelVae: '',
-    // Anima 官方 tag order（README:61-62）：
+    // === 提示词生成：LLM 为主，规则模板降级 ===
+    // LLM API（OpenAI 兼容）
+    llmEnabled: false,
+    llmBaseUrl: '',
+    llmApiKey: '',
+    llmModel: '',
+    // LLM 提示词模板：指导 LLM 如何从剧情提炼画面（{素材} 占位符 + {materials} JSON）
+    llmTemplate: '根据以下剧情素材，为轻小说插画设计正面提示词。要点：画面构图、场景环境、角色动作与神态、光影氛围。\n\n剧情素材：\n{scene}\n\n角色：{character}\n外观：{appearance}\n\n输出 JSON：{"positive": "画面描述（不要质量词）", "negative": "常见崩坏项反咒"}',
+    // 前后缀注入：LLM 结果外包一层（质量词/画师标签等）
+    llmPositivePrefix: 'masterpiece, best quality, score_9, safe, 1girl, ',
+    llmPositiveSuffix: ', @fkey',
+    llmNegativePrefix: 'worst quality, low quality, blurry, bad anatomy, bad hands, ',
+    llmNegativeSuffix: ', nsfw, explicit',
+    // 规则模板（LLM 不可用时降级）——Anima 官方 tag order（README:61-62）：
     // [quality/meta/year/safety] [1girl] [character] [series] [artist] [general tags]
-    // 画师必须在 character 之后、general tags 之前
     promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, {appearance}, @fkey, {scene}',
     negativeTemplate: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, nsfw, explicit',
     aspectRatio: '2:3',
@@ -90,10 +103,38 @@ async function buildWorkflowFromSettings(
 ): Promise<AnimaWorkflow> {
     const { workflow, defaultModels } = await loadWorkflow(currentSettings.comfyUrl, currentSettings.workflowFile);
 
-    // 素材 → 模板 → 提示词（upToIndex 指定时只取该消息及之前的剧情）
+    // 素材（upToIndex 指定时只取该消息及之前的剧情）
     const materials = extractMaterials(character, chat, { sceneWindow: 6, sceneMaxLen: 120, upToIndex: options.upToIndex });
-    const prompt = renderTemplate(currentSettings.promptTemplate, materials);
-    const negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+
+    // 提示词生成：LLM 优先（启用且配置完整时），失败降级规则模板
+    let prompt: string;
+    let negativePrompt: string;
+    if (currentSettings.llmEnabled && currentSettings.llmBaseUrl && currentSettings.llmModel) {
+        try {
+            const llmResult = await generateWithLlm({
+                client: {
+                    baseUrl: currentSettings.llmBaseUrl,
+                    apiKey: currentSettings.llmApiKey,
+                    model: currentSettings.llmModel,
+                },
+                template: currentSettings.llmTemplate,
+                positivePrefix: currentSettings.llmPositivePrefix,
+                positiveSuffix: currentSettings.llmPositiveSuffix,
+                negativePrefix: currentSettings.llmNegativePrefix,
+                negativeSuffix: currentSettings.llmNegativeSuffix,
+            }, materials);
+            prompt = llmResult.positive;
+            negativePrompt = llmResult.negative;
+            console.log(`[${EXTENSION_NAME}] LLM 生成提示词成功`);
+        } catch (error) {
+            console.warn(`[${EXTENSION_NAME}] LLM 生成失败，降级规则模板:`, error);
+            prompt = renderTemplate(currentSettings.promptTemplate, materials);
+            negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+        }
+    } else {
+        prompt = renderTemplate(currentSettings.promptTemplate, materials);
+        negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+    }
 
     // 占位符值表：提示词 + 生成参数（含尺寸推算）
     const values: Record<string, string | number> = {
