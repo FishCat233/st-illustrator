@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "SillyTavern 扩展：对话配图与小说封面生成（ComfyUI + Anima）",
+  "license": "GPL-2.0-or-later",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
