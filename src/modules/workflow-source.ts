@@ -1,4 +1,5 @@
 import type { AnimaWorkflow } from '../types/comfyui.js';
+import { comfyFetch } from './comfy-fetch.js';
 
 /**
  * 工作流加载与占位符协议。
@@ -28,8 +29,8 @@ export interface ParsedWorkflow {
 
 /** 列出 ComfyUI user/default/workflows 下的工作流文件 */
 export async function listWorkflows(comfyUrl: string): Promise<WorkflowFileInfo[]> {
-    const url = `${comfyUrl.replace(/\/+$/, '')}/v2/userdata?path=${encodeURIComponent('workflows')}`;
-    const response = await fetch(url);
+    const path = `/v2/userdata?path=${encodeURIComponent('workflows')}`;
+    const response = await comfyFetch(comfyUrl, path);
     if (!response.ok) {
         throw new Error(`获取工作流列表失败: HTTP ${response.status}`);
     }
@@ -41,8 +42,8 @@ export async function listWorkflows(comfyUrl: string): Promise<WorkflowFileInfo[
 
 /** 读取并解析工作流（UI 格式 → API 格式） */
 export async function loadWorkflow(comfyUrl: string, filePath: string): Promise<ParsedWorkflow> {
-    const url = `${comfyUrl.replace(/\/+$/, '')}/userdata/${encodeURIComponent(filePath)}`;
-    const response = await fetch(url);
+    const path = `/userdata/${encodeURIComponent(filePath)}`;
+    const response = await comfyFetch(comfyUrl, path);
     if (!response.ok) {
         throw new Error(`读取工作流失败: HTTP ${response.status}`);
     }

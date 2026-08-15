@@ -6,6 +6,7 @@ import { TriggerController } from './modules/triggers.js';
 import { renderTemplate, buildParamPlaceholders } from './modules/workflow.js';
 import { loadWorkflow, fillPlaceholders, fillMissingParams, hasUnresolvedPlaceholders } from './modules/workflow-source.js';
 import { ComfyUIGenerator } from './modules/generator.js';
+import { resetProxyProbe } from './modules/comfy-fetch.js';
 import type { AnimaWorkflow } from './types/comfyui.js';
 
 const EXTENSION_NAME = 'st-illustrator';
@@ -51,7 +52,12 @@ let currentSettings: Settings = { ...defaultSettings };
  */
 function loadSettingsFromExtensionSettings(): void {
     const extensionSettings = getExtensionSettings();
+    const previousUrl = currentSettings.comfyUrl;
     currentSettings = { ...defaultSettings, ...extensionSettings };
+    if (previousUrl !== currentSettings.comfyUrl) {
+        // ComfyUI 地址变化时重置代理探测缓存
+        resetProxyProbe();
+    }
     trigger.updateConfig({
         enabled: currentSettings.enabled,
         autoMode: currentSettings.autoMode,
@@ -166,21 +172,22 @@ export async function generateIllustration(
     if (images.length === 0) return false;
 
     // 把图插进目标消息
-    await insertImageIntoMessage(messageIndex, images[0].filename);
+    await insertImageIntoMessage(messageIndex, images[0]);
     trigger.markGenerated(messageIndex);
     await context.saveChat();
     return true;
 }
 
-async function insertImageIntoMessage(messageIndex: number, filename: string): Promise<void> {
+async function insertImageIntoMessage(messageIndex: number, image: { filename: string; type?: string; subfolder?: string }): Promise<void> {
     const { appendMediaToMessage } = await import('st/script');
+    const { imageDisplayUrl } = await import('./modules/comfy-fetch.js');
     const context = getContext() as {
         chat: StoryMessage[];
     };
     const message = context.chat[messageIndex];
     if (!message) return;
 
-    const url = `${currentSettings.comfyUrl}/view?filename=${encodeURIComponent(filename)}&type=output`;
+    const url = await imageDisplayUrl(currentSettings.comfyUrl, image);
     const mediaAttachment = {
         url,
         type: 'image',
