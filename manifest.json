@@ -1,0 +1,11 @@
+{
+  "display_name": "ST Illustrator",
+  "version": "0.1.0",
+  "author": "st-illustrator",
+  "description": "为对话剧情自动生成配图、为角色卡生成小说封面（ComfyUI + Anima）",
+  "js": "dist/main.js",
+  "css": "",
+  "loading_order": 100,
+  "requires": [],
+  "dependencies": []
+}

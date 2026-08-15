@@ -1,0 +1,20 @@
+{
+  "name": "st-illustrator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SillyTavern 扩展：对话配图与小说封面生成（ComfyUI + Anima）",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run build && node --check dist/main.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}
