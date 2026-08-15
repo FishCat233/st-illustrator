@@ -55,8 +55,11 @@ function getExtensionSettings(): Partial<Settings> {
 }
 
 /** 生成配图并插入目标消息 */
-export async function generateIllustration(targetMessageId?: number): Promise<boolean> {
-    if (!currentSettings.enabled) {
+export async function generateIllustration(
+    targetMessageId?: number,
+    options: { force?: boolean; bypassEnabled?: boolean } = {},
+): Promise<boolean> {
+    if (!options.bypassEnabled && !currentSettings.enabled) {
         console.log(`[${EXTENSION_NAME}] 扩展未启用，跳过生成`);
         return false;
     }
@@ -71,7 +74,7 @@ export async function generateIllustration(targetMessageId?: number): Promise<bo
     if (!context.chat || context.chat.length === 0) return false;
 
     const messageIndex = targetMessageId ?? context.chat.length - 1;
-    if (!trigger.shouldAutoTrigger(messageIndex)) return false;
+    if (!options.force && !trigger.shouldAutoTrigger(messageIndex)) return false;
 
     const character = context.characters?.[context.characterId];
     const promptParams = buildPromptParams(character, context.chat, {
@@ -147,11 +150,26 @@ async function onMessageReceived(messageId: number): Promise<void> {
     }
 }
 
-export function init(): void {
+/** 手动配图：绕过触发检查与启用检查，对最后一条消息生成 */
+export async function manualGenerate(): Promise<boolean> {
+    return generateIllustration(undefined, { force: true, bypassEnabled: true });
+}
+
+export async function init(): Promise<void> {
     console.log(`[${EXTENSION_NAME}] 初始化`);
     loadSettingsFromExtensionSettings();
     eventSource.on(event_types.EXTENSION_SETTINGS_LOADED, loadSettingsFromExtensionSettings);
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+
+    // 设置面板等 DOM 就绪后再渲染（ST 扩展加载早于 DOM 完成）
+    const { addSettingsUI } = await import('./modules/ui.js');
+    if (document.getElementById('extensions_settings')) {
+        addSettingsUI().catch((error) => console.error(`[${EXTENSION_NAME}] 设置面板加载失败:`, error));
+    } else {
+        eventSource.once(event_types.APP_READY, () => {
+            addSettingsUI().catch((error) => console.error(`[${EXTENSION_NAME}] 设置面板加载失败:`, error));
+        });
+    }
 }
 
 init();

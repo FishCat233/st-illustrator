@@ -34,6 +34,12 @@ declare module 'st/events' {
         [key: string]: string;
     };
 
+    export interface EventEmitter {
+        on(event: string, listener: (...args: any[]) => void): void;
+        once(event: string, listener: (...args: any[]) => void): void;
+        emit(event: string, ...args: unknown[]): Promise<void>;
+    }
+
     export const eventSource: EventEmitter;
 }
 

@@ -1,0 +1,99 @@
+<div class="st-illustrator_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>ST Illustrator</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_enabled">启用配图</label>
+                <label class="checkbox_label" for="sti_enabled">
+                    <input id="sti_enabled" type="checkbox">
+                    <span>启用</span>
+                </label>
+
+                <label for="sti_auto_mode">触发模式</label>
+                <select id="sti_auto_mode" class="text_pole">
+                    <option value="auto">自动</option>
+                    <option value="manual">手动</option>
+                </select>
+
+                <label for="sti_min_interval">配图最小间隔（秒）</label>
+                <input id="sti_min_interval" type="number" min="0" step="5" class="text_pole">
+            </div>
+
+            <hr>
+
+            <h4>ComfyUI</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_comfy_url">ComfyUI 地址</label>
+                <input id="sti_comfy_url" type="text" class="text_pole">
+
+                <label for="sti_model_unet">UNET 模型</label>
+                <input id="sti_model_unet" type="text" class="text_pole">
+
+                <label for="sti_model_clip">CLIP 模型</label>
+                <input id="sti_model_clip" type="text" class="text_pole">
+
+                <label for="sti_model_vae">VAE 模型</label>
+                <input id="sti_model_vae" type="text" class="text_pole">
+            </div>
+
+            <hr>
+
+            <h4>提示词</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_artist">画师（@前缀）</label>
+                <input id="sti_artist" type="text" class="text_pole">
+
+                <label for="sti_quality">质量/年份/安全标签</label>
+                <input id="sti_quality" type="text" class="text_pole">
+
+                <label for="sti_style">画风</label>
+                <input id="sti_style" type="text" class="text_pole">
+
+                <label for="sti_neg">负面提示词</label>
+                <textarea id="sti_neg" class="text_pole" rows="3"></textarea>
+            </div>
+
+            <hr>
+
+            <h4>生成参数</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_aspect_ratio">长宽比</label>
+                <select id="sti_aspect_ratio" class="text_pole">
+                    <option value="21:9">21:9 超宽</option>
+                    <option value="16:9">16:9</option>
+                    <option value="16:10">16:10</option>
+                    <option value="3:2">3:2</option>
+                    <option value="4:3">4:3</option>
+                    <option value="1:1">1:1 方形</option>
+                    <option value="3:4">3:4</option>
+                    <option value="2:3">2:3</option>
+                    <option value="3:5">3:5</option>
+                    <option value="9:16">9:16</option>
+                    <option value="9:21">9:21 超长竖</option>
+                </select>
+
+                <label for="sti_steps">步数</label>
+                <input id="sti_steps" type="number" min="1" max="100" class="text_pole">
+
+                <label for="sti_cfg">CFG</label>
+                <input id="sti_cfg" type="number" min="0.5" max="15" step="0.5" class="text_pole">
+
+                <label for="sti_seed">种子（-1 随机）</label>
+                <input id="sti_seed" type="number" class="text_pole">
+            </div>
+
+            <hr>
+
+            <div class="flex-container wide100p">
+                <button id="sti_test_generate" class="menu_button">测试生成</button>
+                <button id="sti_manual_generate" class="menu_button">手动配图</button>
+            </div>
+            <div id="sti_status" class="muted"></div>
+
+        </div>
+    </div>
+</div>

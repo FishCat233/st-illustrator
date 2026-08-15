@@ -1,0 +1,149 @@
+import { getContext, renderExtensionTemplateAsync } from 'st/extensions';
+import { saveSettingsDebounced } from 'st/script';
+import { defaultSettings, type Settings } from '../main.js';
+
+/**
+ * 设置面板：渲染模板、读写 extension_settings、绑定控件事件。
+ * 控件 id 与 settings.html 一一对应。
+ */
+
+const CONTAINER_ID = 'st_illustrator_container';
+
+export function getSettings(): Settings {
+    const extensionSettings = getContext()?.extensionSettings as Record<string, unknown>;
+    return { ...defaultSettings, ...(extensionSettings.st_illustrator as Partial<Settings>) };
+}
+
+export function setSettings(settings: Settings): void {
+    const extensionSettings = getContext()?.extensionSettings as Record<string, unknown>;
+    extensionSettings.st_illustrator = settings;
+    saveSettingsDebounced();
+}
+
+export async function addSettingsUI(): Promise<void> {
+    // 第三方扩展不预设容器，动态创建后挂到 #extensions_settings（ST 设置面板）
+    let container = $(`#${CONTAINER_ID}`);
+    if (container.length === 0) {
+        container = $('<div>', { id: CONTAINER_ID, class: 'extension_container' }).appendTo('#extensions_settings');
+    }
+    const html = await renderExtensionTemplateAsync('st-illustrator', 'settings');
+    container.append(html);
+    bindSettingsUI();
+}
+
+function bindSettingsUI(): void {
+    const settings = getSettings();
+
+    $('#sti_enabled').prop('checked', settings.enabled);
+    $('#sti_auto_mode').val(settings.autoMode ? 'auto' : 'manual');
+    $('#sti_min_interval').val(settings.minIntervalMs / 1000);
+    $('#sti_comfy_url').val(settings.comfyUrl);
+    $('#sti_model_unet').val(settings.modelUnet);
+    $('#sti_model_clip').val(settings.modelClip);
+    $('#sti_model_vae').val(settings.modelVae);
+    $('#sti_artist').val(settings.artist);
+    $('#sti_quality').val(settings.qualityMetaYearSafe);
+    $('#sti_style').val(settings.style);
+    $('#sti_neg').val(settings.neg);
+    $('#sti_aspect_ratio').val(settings.aspectRatio);
+    $('#sti_steps').val(settings.steps);
+    $('#sti_cfg').val(settings.cfg);
+    $('#sti_seed').val(settings.seed);
+
+    // 所有控件变化 → 保存
+    $('#sti_enabled').on('change', () => {
+        const next = getSettings();
+        next.enabled = !!$('#sti_enabled').prop('checked');
+        setSettings(next);
+    });
+    $('#sti_auto_mode').on('change', () => {
+        const next = getSettings();
+        next.autoMode = $('#sti_auto_mode').val() === 'auto';
+        setSettings(next);
+    });
+    $('#sti_min_interval').on('change', () => {
+        const next = getSettings();
+        next.minIntervalMs = Math.max(0, Number($('#sti_min_interval').val()) * 1000);
+        setSettings(next);
+    });
+    $('#sti_comfy_url').on('change', () => {
+        const next = getSettings();
+        next.comfyUrl = String($('#sti_comfy_url').val() ?? defaultSettings.comfyUrl);
+        setSettings(next);
+    });
+    $('#sti_model_unet').on('change', () => {
+        const next = getSettings();
+        next.modelUnet = String($('#sti_model_unet').val() ?? defaultSettings.modelUnet);
+        setSettings(next);
+    });
+    $('#sti_model_clip').on('change', () => {
+        const next = getSettings();
+        next.modelClip = String($('#sti_model_clip').val() ?? defaultSettings.modelClip);
+        setSettings(next);
+    });
+    $('#sti_model_vae').on('change', () => {
+        const next = getSettings();
+        next.modelVae = String($('#sti_model_vae').val() ?? defaultSettings.modelVae);
+        setSettings(next);
+    });
+    $('#sti_artist').on('change', () => {
+        const next = getSettings();
+        next.artist = String($('#sti_artist').val() ?? defaultSettings.artist);
+        setSettings(next);
+    });
+    $('#sti_quality').on('change', () => {
+        const next = getSettings();
+        next.qualityMetaYearSafe = String($('#sti_quality').val() ?? defaultSettings.qualityMetaYearSafe);
+        setSettings(next);
+    });
+    $('#sti_style').on('change', () => {
+        const next = getSettings();
+        next.style = String($('#sti_style').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_neg').on('change', () => {
+        const next = getSettings();
+        next.neg = String($('#sti_neg').val() ?? defaultSettings.neg);
+        setSettings(next);
+    });
+    $('#sti_aspect_ratio').on('change', () => {
+        const next = getSettings();
+        next.aspectRatio = String($('#sti_aspect_ratio').val() ?? defaultSettings.aspectRatio);
+        setSettings(next);
+    });
+    $('#sti_steps').on('change', () => {
+        const next = getSettings();
+        next.steps = Number($('#sti_steps').val());
+        setSettings(next);
+    });
+    $('#sti_cfg').on('change', () => {
+        const next = getSettings();
+        next.cfg = Number($('#sti_cfg').val());
+        setSettings(next);
+    });
+    $('#sti_seed').on('change', () => {
+        const next = getSettings();
+        next.seed = Number($('#sti_seed').val());
+        setSettings(next);
+    });
+
+    $('#sti_test_generate').on('click', async () => {
+        const { manualGenerate } = await import('../main.js');
+        try {
+            const ok = await manualGenerate();
+            $('#sti_status').text(ok ? '生成成功' : '未生成（看控制台）');
+        } catch (error) {
+            $('#sti_status').text(`生成失败: ${String(error)}`);
+        }
+    });
+
+    $('#sti_manual_generate').on('click', async () => {
+        const { manualGenerate } = await import('../main.js');
+        try {
+            const ok = await manualGenerate();
+            $('#sti_status').text(ok ? '生成成功' : '未生成（看控制台）');
+        } catch (error) {
+            $('#sti_status').text(`生成失败: ${String(error)}`);
+        }
+    });
+}
