@@ -35,9 +35,33 @@ export const defaultSettings = {
     llmBaseUrl: '',
     llmApiKey: '',
     llmModel: '',
-    // LLM 提示词模板：指导 LLM 如何从剧情提炼画面（{素材} 占位符 + {materials} JSON）
-    llmTemplate: '根据以下剧情素材，为轻小说插画设计正面提示词。要点：画面构图、场景环境、角色动作与神态、光影氛围。\n\n剧情素材：\n{scene}\n\n角色：{character}\n外观：{appearance}\n\n输出 JSON：{"positive": "画面描述（不要质量词）", "negative": "常见崩坏项反咒"}',
-    // 前后缀注入：LLM 结果外包一层（质量词/画师标签等）
+    // LLM 提示词模板：指导 LLM 如何从剧情提炼画面（{素材} 占位符）
+    // 融合 Anima 官方 README（混合提示词、tag order、反写实）与用户自定指令
+    llmTemplate: `你是 Anima 动漫提示词专家。Anima 是 CircleStone Labs 的 2B 参数动漫大模型，提示词逻辑与常规模型不同：它在「Danbooru 标签 + 连贯自然语言」的混合提示词风格下表现最强。
+
+根据剧情素材，为轻小说插画设计正向/负向提示词。输出 JSON：{"positive": "英文混合提示词", "negative": "英文负面反咒"}。只输出 JSON，不要任何解释。
+
+## positive 的构建规则
+
+1. 标签区开头：用 Danbooru 标签堆砌核心内容——角色、外貌特征、衣着、所属 IP。小写、空格分隔、不用下划线。**不要写质量标签、安全标签、人数、画师**（这些系统已前置，如 masterpiece, best quality, score_9, safe, 1girl, @fkey）。
+2. 自然语言区：紧接着写 2-4 句流畅且富有画面感的英文自然语言，详细扩写场景、光影、动态、情绪和氛围。**背景必须具体描述**——环境、光线方向、质感、天气，不要用「a beautiful background」这类抽象指代。突出动漫线条、赛璐珞或插画风光影。
+3. 场景必须贴合剧情素材，有故事感和构图感（可加 dynamic angle, cinematic lighting, low angle shot 等构图词）。
+4. 禁止写实词：photorealistic, 3d, realistic, octane render 等一律不得出现。
+
+## negative 的构建规则
+
+列出常见崩坏反咒，覆盖：解剖错误（bad anatomy, bad hands, bad feet, extra fingers, missing fingers）、画质问题（blurry, low quality, jpeg artifacts, watermark）、多余元素（text, signature, logo, censor bar）、安全约束（nsfw, explicit）。
+
+## 素材
+
+剧情场景：{scene}
+
+对话记录：
+{chat_history}
+
+角色：{character}
+外观：{appearance}`,
+    // 前后缀注入：LLM 结果外包一层（质量词/画师标签等，画师由用户决定）
     llmPositivePrefix: 'masterpiece, best quality, score_9, safe, 1girl, ',
     llmPositiveSuffix: ', @fkey',
     llmNegativePrefix: 'worst quality, low quality, blurry, bad anatomy, bad hands, ',
@@ -125,16 +149,20 @@ async function buildWorkflowFromSettings(
             }, materials);
             prompt = llmResult.positive;
             negativePrompt = llmResult.negative;
-            console.log(`[${EXTENSION_NAME}] LLM 生成提示词成功`);
         } catch (error) {
             console.warn(`[${EXTENSION_NAME}] LLM 生成失败，降级规则模板:`, error);
             prompt = renderTemplate(currentSettings.promptTemplate, materials);
             negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
         }
     } else {
+        console.log(`[${EXTENSION_NAME}] LLM 未启用或未配置（llmEnabled=${currentSettings.llmEnabled}），使用规则模板`);
         prompt = renderTemplate(currentSettings.promptTemplate, materials);
         negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
     }
+
+    console.log(`[${EXTENSION_NAME}] === 最终提示词 ===`);
+    console.log(`[${EXTENSION_NAME}] positive:`, prompt);
+    console.log(`[${EXTENSION_NAME}] negative:`, negativePrompt);
 
     // 占位符值表：提示词 + 生成参数（含尺寸推算）
     const values: Record<string, string | number> = {

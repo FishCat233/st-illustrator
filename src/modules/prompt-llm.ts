@@ -41,6 +41,9 @@ export async function generateWithLlm(
 ): Promise<LlmResult> {
     // 渲染用户模板（{素材} 占位符替换）——渲染器会清掉空素材留下的逗号
     const template = renderLlmTemplate(config.template, materials);
+    console.log('[st-illustrator] === LLM 请求 ===');
+    console.log('[st-illustrator] 素材:', JSON.stringify(materials, null, 2));
+    console.log('[st-illustrator] 渲染后模板:\n', template);
 
     const messages = [
         {
@@ -54,11 +57,18 @@ export async function generateWithLlm(
     ];
 
     const raw = await chatCompletion(config.client, messages);
+    console.log('[st-illustrator] === LLM 原始返回 ===\n', raw);
+
     const result = parseLlmJson(raw);
+    console.log('[st-illustrator] === LLM 解析结果 ===', JSON.stringify(result, null, 2));
 
     // 前后缀注入
     result.positive = `${config.positivePrefix}${result.positive}${config.positiveSuffix}`.replace(/,{2,}/g, ',').replace(/,+\s*$/g, '').trim();
     result.negative = `${config.negativePrefix}${result.negative}${config.negativeSuffix}`.replace(/,{2,}/g, ',').replace(/,+\s*$/g, '').trim();
+
+    console.log('[st-illustrator] === 注入前后缀后 ===');
+    console.log('[st-illustrator] positive:', result.positive);
+    console.log('[st-illustrator] negative:', result.negative);
 
     return result;
 }

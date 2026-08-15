@@ -33,6 +33,8 @@ export async function chatCompletion(config: LlmClientConfig, messages: LlmMessa
     const url = `${base}/chat/completions`;
     const timeoutMs = config.timeoutMs ?? 60_000;
 
+    console.log(`[st-illustrator] LLM 请求 ${url} model=${config.model} messages=${messages.length}`);
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
