@@ -1,10 +1,10 @@
 import { eventSource, event_types } from 'st/events';
 import { getContext } from 'st/extensions';
 import type { StoryCharacter, StoryMessage } from './modules/extractor.js';
-import { buildPromptParams } from './modules/extractor.js';
+import { extractMaterials } from './modules/extractor.js';
 import { TriggerController } from './modules/triggers.js';
-import { buildPlaceholderValues } from './modules/workflow.js';
-import { loadWorkflow, fillPlaceholders, hasPlaceholder } from './modules/workflow-source.js';
+import { renderTemplate, buildParamPlaceholders } from './modules/workflow.js';
+import { loadWorkflow, fillPlaceholders, fillMissingParams, hasUnresolvedPlaceholders } from './modules/workflow-source.js';
 import { ComfyUIGenerator } from './modules/generator.js';
 import type { AnimaWorkflow } from './types/comfyui.js';
 
@@ -13,10 +13,9 @@ const EXTENSION_NAME = 'st-illustrator';
 /**
  * 扩展默认设置。真实设置存入 extension_settings.st_illustrator，
  * 与 ST 设置系统共用持久化。
- * 默认值对齐用户实际环境（实测 D:\1ToolAndProject\ComfyUI_windows_portable_nvidia_1）：
- * 工作流用用户设计的 t.json（含 %prompt% 等占位符，SaveImage 前缀 SillyTavern），
- * 模型默认 anima-base-v1.0 + qwen_3_06b_base + qwen_image_vae，
- * 采样器 er_sde + simple（用户工作流 KSampler 参数）。
+ * 提示词通过「模板」配置，模板用 {素材} 引用插件提取的内容，
+ * 生图规范（Anima/SD 等）完全由模板决定，插件不绑定任何生图细节。
+ * 默认模板是 Anima 风格（当前环境），SD 用户换成自己的模板即可。
  */
 export const defaultSettings = {
     enabled: false,
@@ -25,13 +24,11 @@ export const defaultSettings = {
     messagesPerIllustration: 1,
     comfyUrl: 'http://127.0.0.1:8188',
     workflowFile: 'workflows/t.json',
-    modelUnet: 'anima-base-v1.0.safetensors',
-    modelClip: 'qwen_3_06b_base.safetensors',
-    modelVae: 'qwen_image_vae.safetensors',
-    artist: '@fkey',
-    qualityMetaYearSafe: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe',
-    neg: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, red sleeves, red sleeve cuffs, nsfw, explicit',
-    style: '',
+    modelUnet: '',
+    modelClip: '',
+    modelVae: '',
+    promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, @fkey, {appearance}, {scene}',
+    negativeTemplate: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, nsfw, explicit',
     aspectRatio: '2:3',
     steps: 30,
     cfg: 4,
@@ -75,20 +72,38 @@ function getExtensionSettings(): Partial<Settings> {
  * 2. 替换 %prompt% / %negative_prompt% / %sampler% / %scheduler% 占位符
  * 3. seed/steps/cfg/width/height 直接注入对应节点（模板中留空时）
  */
-async function buildWorkflowFromSettings(promptParams: ReturnType<typeof buildPromptParams>): Promise<AnimaWorkflow> {
+/**
+ * 从设置自选的工作流构建可提交的 API 格式 workflow：
+ * 1. 提取素材（角色卡/剧情）
+ * 2. 渲染用户模板（{素材} → 提示词）
+ * 3. 从 ComfyUI 读取工作流（UI 格式 → API 格式）
+ * 4. 替换工作流中的 %占位符%（prompt/negative_prompt/seed/steps/cfg/sampler/scheduler/width/height）
+ * 5. 模型覆盖（设置面板显式填写时优先，否则用工作流默认）
+ */
+async function buildWorkflowFromSettings(
+    character: StoryCharacter | undefined,
+    chat: StoryMessage[],
+): Promise<AnimaWorkflow> {
     const { workflow, defaultModels } = await loadWorkflow(currentSettings.comfyUrl, currentSettings.workflowFile);
 
-    const values = buildPlaceholderValues({
-        prompt: promptParams,
-        params: {
+    // 素材 → 模板 → 提示词
+    const materials = extractMaterials(character, chat, { sceneWindow: 6, sceneMaxLen: 120 });
+    const prompt = renderTemplate(currentSettings.promptTemplate, materials);
+    const negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+
+    // 占位符值表：提示词 + 生成参数（含尺寸推算）
+    const values: Record<string, string | number> = {
+        prompt,
+        negative_prompt: negativePrompt,
+        ...buildParamPlaceholders({
             aspect_ratio: currentSettings.aspectRatio,
             steps: currentSettings.steps,
             cfg: currentSettings.cfg,
             seed: currentSettings.seed,
             sampler_name: currentSettings.samplerName,
             scheduler: currentSettings.scheduler,
-        },
-    });
+        }),
+    };
 
     // 模型覆盖：设置面板显式填写时优先，否则用工作流里的默认模型
     const modelNames = {
@@ -102,27 +117,16 @@ async function buildWorkflowFromSettings(promptParams: ReturnType<typeof buildPr
         if (node.class_type === 'VAELoader' && modelNames.vae) node.inputs.vae_name = modelNames.vae;
     }
 
-    // 占位符替换（%prompt% 等）
+    // 占位符替换（%prompt% / %seed% / %width% ... 工作流里写了哪就用哪）
     fillPlaceholders(workflow, values);
 
-    // 模板中留空的生成参数直接注入节点（t.json 的 KSampler/EmptyLatentImage 留空由插件填）
-    for (const node of Object.values(workflow)) {
-        if (node.class_type === 'KSampler') {
-            const inputs = node.inputs;
-            if (inputs.seed === undefined || inputs.seed === null) inputs.seed = values.seed ?? -1;
-            if (inputs.steps === undefined || inputs.steps === null) inputs.steps = values.steps ?? 30;
-            if (inputs.cfg === undefined || inputs.cfg === null) inputs.cfg = values.cfg ?? 4;
-        }
-        if (node.class_type === 'EmptyLatentImage') {
-            const inputs = node.inputs;
-            if (inputs.width === undefined || inputs.width === null) inputs.width = values.width ?? 1024;
-            if (inputs.height === undefined || inputs.height === null) inputs.height = values.height ?? 1024;
-        }
-    }
+    // 兜底填充：工作流中留空的必填生成参数（KSampler 的 seed/steps/cfg 等）
+    fillMissingParams(workflow, values);
 
-    // 校验：正负提示词占位符必须被替换（防用户选错工作流）
-    if (hasPlaceholder(workflow, 'prompt') || hasPlaceholder(workflow, 'negative_prompt')) {
-        throw new Error('工作流缺少 %prompt% / %negative_prompt% 占位符替换（工作流选择可能不对）');
+    // 校验：工作流里的占位符必须全部有值（防用户选错工作流或拼错占位符名）
+    const unresolved = hasUnresolvedPlaceholders(workflow);
+    if (unresolved.length > 0) {
+        throw new Error(`工作流有未替换的占位符: %${unresolved.join('%, %')}%（检查工作流选择或拼写）`);
     }
 
     return workflow;
@@ -154,16 +158,9 @@ export async function generateIllustration(
     if (!options.force && !trigger.shouldAutoTrigger(messageIndex)) return false;
 
     const character = context.characters?.[context.characterId];
-    const promptParams = buildPromptParams(character, context.chat, {
-        artist: currentSettings.artist,
-        qualityMetaYearSafe: currentSettings.qualityMetaYearSafe,
-        neg: currentSettings.neg,
-        style: currentSettings.style,
-    });
+    const workflow = await buildWorkflowFromSettings(character, context.chat);
 
-    const workflow = await buildWorkflowFromSettings(promptParams);
-
-    console.log(`[${EXTENSION_NAME}] 生成配图（消息 ${messageIndex}）`, promptParams);
+    console.log(`[${EXTENSION_NAME}] 生成配图（消息 ${messageIndex}）`);
 
     const images = await generator.generate(workflow);
     if (images.length === 0) return false;

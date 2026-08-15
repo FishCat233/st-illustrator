@@ -64,10 +64,8 @@ function bindSettingsUI(): void {
     $('#sti_model_unet').val(settings.modelUnet);
     $('#sti_model_clip').val(settings.modelClip);
     $('#sti_model_vae').val(settings.modelVae);
-    $('#sti_artist').val(settings.artist);
-    $('#sti_quality').val(settings.qualityMetaYearSafe);
-    $('#sti_style').val(settings.style);
-    $('#sti_neg').val(settings.neg);
+    $('#sti_prompt_template').val(settings.promptTemplate);
+    $('#sti_negative_template').val(settings.negativeTemplate);
     $('#sti_aspect_ratio').val(settings.aspectRatio);
     $('#sti_steps').val(settings.steps);
     $('#sti_cfg').val(settings.cfg);
@@ -111,27 +109,17 @@ function bindSettingsUI(): void {
     });
     $('#sti_model_vae').on('change', () => {
         const next = getSettings();
-        next.modelVae = String($('#sti_model_vae').val() ?? defaultSettings.modelVae);
+        next.modelVae = String($('#sti_model_vae').val() ?? '');
         setSettings(next);
     });
-    $('#sti_artist').on('change', () => {
+    $('#sti_prompt_template').on('change', () => {
         const next = getSettings();
-        next.artist = String($('#sti_artist').val() ?? defaultSettings.artist);
+        next.promptTemplate = String($('#sti_prompt_template').val() ?? defaultSettings.promptTemplate);
         setSettings(next);
     });
-    $('#sti_quality').on('change', () => {
+    $('#sti_negative_template').on('change', () => {
         const next = getSettings();
-        next.qualityMetaYearSafe = String($('#sti_quality').val() ?? defaultSettings.qualityMetaYearSafe);
-        setSettings(next);
-    });
-    $('#sti_style').on('change', () => {
-        const next = getSettings();
-        next.style = String($('#sti_style').val() ?? '');
-        setSettings(next);
-    });
-    $('#sti_neg').on('change', () => {
-        const next = getSettings();
-        next.neg = String($('#sti_neg').val() ?? defaultSettings.neg);
+        next.negativeTemplate = String($('#sti_negative_template').val() ?? defaultSettings.negativeTemplate);
         setSettings(next);
     });
     $('#sti_aspect_ratio').on('change', () => {

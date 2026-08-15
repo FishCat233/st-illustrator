@@ -48,19 +48,14 @@
 
             <hr>
 
-            <h4>提示词</h4>
+            <h4>提示词模板</h4>
             <div class="flex-container flexFlowColumn wide100p">
-                <label for="sti_artist">画师（@前缀）</label>
-                <input id="sti_artist" type="text" class="text_pole">
+                <label for="sti_prompt_template">正面模板</label>
+                <textarea id="sti_prompt_template" class="text_pole" rows="3"></textarea>
+                <div class="muted small">可用素材占位符：{character} {appearance} {personality} {scenario} {scene}。生成规范（Anima/SD）完全由模板决定</div>
 
-                <label for="sti_quality">质量/年份/安全标签</label>
-                <input id="sti_quality" type="text" class="text_pole">
-
-                <label for="sti_style">画风</label>
-                <input id="sti_style" type="text" class="text_pole">
-
-                <label for="sti_neg">负面提示词</label>
-                <textarea id="sti_neg" class="text_pole" rows="3"></textarea>
+                <label for="sti_negative_template">负面模板</label>
+                <textarea id="sti_negative_template" class="text_pole" rows="3"></textarea>
             </div>
 
             <hr>
