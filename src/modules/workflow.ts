@@ -54,6 +54,14 @@ export function renderTemplate(template: string, materials: StoryMaterials): str
     return result;
 }
 
+/**
+ * 生成随机种子（ComfyUI 要求 seed >= 0，-1 不合法）。
+ * 用户填负数（如 -1 表示随机）时使用。
+ */
+export function randomSeed(): number {
+    return Math.floor(Math.random() * 4_294_967_295);
+}
+
 /** 生成参数 → 占位符值表（%seed% / %steps% / %cfg% / %sampler% / %scheduler% / %width% / %height%） */
 export function buildParamPlaceholders(params: {
     aspect_ratio?: string;
@@ -67,7 +75,7 @@ export function buildParamPlaceholders(params: {
 }): Record<string, string | number> {
     const { width, height } = resolveDimensions(params);
     return {
-        seed: params.seed ?? -1,
+        seed: params.seed !== undefined && params.seed >= 0 ? params.seed : randomSeed(),
         steps: params.steps ?? 30,
         cfg: params.cfg ?? 4,
         sampler: params.sampler_name ?? 'er_sde',

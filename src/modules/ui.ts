@@ -66,6 +66,19 @@ function bindSettingsUI(): void {
     $('#sti_model_vae').val(settings.modelVae);
     $('#sti_prompt_template').val(settings.promptTemplate);
     $('#sti_negative_template').val(settings.negativeTemplate);
+    $('#sti_prompt_mode').val(settings.promptMode);
+    $('#sti_scene_window').val(settings.sceneWindow);
+    $('#sti_scene_max_len').val(settings.sceneMaxLen);
+    $('#sti_scene_full_max_len').val(settings.sceneFullMaxLen);
+    $('#sti_chat_history_max_chars').val(settings.chatHistoryMaxChars);
+    $('#sti_llm_base_url').val(settings.llmBaseUrl);
+    $('#sti_llm_api_key').val(settings.llmApiKey);
+    $('#sti_llm_model').val(settings.llmModel);
+    $('#sti_llm_template').val(settings.llmTemplate);
+    $('#sti_llm_positive_prefix').val(settings.llmPositivePrefix);
+    $('#sti_llm_positive_suffix').val(settings.llmPositiveSuffix);
+    $('#sti_llm_negative_prefix').val(settings.llmNegativePrefix);
+    $('#sti_llm_negative_suffix').val(settings.llmNegativeSuffix);
     $('#sti_aspect_ratio').val(settings.aspectRatio);
     $('#sti_steps').val(settings.steps);
     $('#sti_cfg').val(settings.cfg);
@@ -110,6 +123,71 @@ function bindSettingsUI(): void {
     $('#sti_model_vae').on('change', () => {
         const next = getSettings();
         next.modelVae = String($('#sti_model_vae').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_prompt_mode').on('change', () => {
+        const next = getSettings();
+        next.promptMode = $('#sti_prompt_mode').val() === 'llm' ? 'llm' : 'template';
+        setSettings(next);
+    });
+    $('#sti_scene_window').on('change', () => {
+        const next = getSettings();
+        next.sceneWindow = Number($('#sti_scene_window').val());
+        setSettings(next);
+    });
+    $('#sti_scene_max_len').on('change', () => {
+        const next = getSettings();
+        next.sceneMaxLen = Number($('#sti_scene_max_len').val());
+        setSettings(next);
+    });
+    $('#sti_scene_full_max_len').on('change', () => {
+        const next = getSettings();
+        next.sceneFullMaxLen = Number($('#sti_scene_full_max_len').val());
+        setSettings(next);
+    });
+    $('#sti_chat_history_max_chars').on('change', () => {
+        const next = getSettings();
+        next.chatHistoryMaxChars = Number($('#sti_chat_history_max_chars').val());
+        setSettings(next);
+    });
+    $('#sti_llm_base_url').on('change', () => {
+        const next = getSettings();
+        next.llmBaseUrl = String($('#sti_llm_base_url').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_llm_api_key').on('change', () => {
+        const next = getSettings();
+        next.llmApiKey = String($('#sti_llm_api_key').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_llm_model').on('change', () => {
+        const next = getSettings();
+        next.llmModel = String($('#sti_llm_model').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_llm_template').on('change', () => {
+        const next = getSettings();
+        next.llmTemplate = String($('#sti_llm_template').val() ?? defaultSettings.llmTemplate);
+        setSettings(next);
+    });
+    $('#sti_llm_positive_prefix').on('change', () => {
+        const next = getSettings();
+        next.llmPositivePrefix = String($('#sti_llm_positive_prefix').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_llm_positive_suffix').on('change', () => {
+        const next = getSettings();
+        next.llmPositiveSuffix = String($('#sti_llm_positive_suffix').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_llm_negative_prefix').on('change', () => {
+        const next = getSettings();
+        next.llmNegativePrefix = String($('#sti_llm_negative_prefix').val() ?? '');
+        setSettings(next);
+    });
+    $('#sti_llm_negative_suffix').on('change', () => {
+        const next = getSettings();
+        next.llmNegativeSuffix = String($('#sti_llm_negative_suffix').val() ?? '');
         setSettings(next);
     });
     $('#sti_prompt_template').on('change', () => {

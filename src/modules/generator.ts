@@ -4,11 +4,11 @@ import type {
     ComfyUIImage,
     AnimaWorkflow,
 } from '../types/comfyui.js';
+import { comfyFetch, imageDisplayUrl, probeProxy } from './comfy-fetch.js';
 
 /**
  * ComfyUI 生成客户端：提交 workflow → 轮询 history → 取图。
- * 只依赖 ComfyUI 标准 API（POST /prompt、GET /history/<id>、GET /view），
- * 不依赖第三方 custom node。
+ * 请求走 comfy-fetch（直连 + ST 代理回退，绕开 CORS）。
  */
 
 export interface GeneratorSettings {
@@ -33,6 +33,9 @@ export class ComfyUIGenerator {
      * 出错时抛 Error，错误信息带后端返回的详情。
      */
     async generate(workflow: AnimaWorkflow): Promise<ComfyUIImage[]> {
+        // 生成前探测代理可用性（决定图片 URL 用直连还是代理）
+        await probeProxy(this.url);
+
         const promptId = await this.submit(workflow);
         const history = await this.waitForResult(promptId);
         const entry = history[promptId];
@@ -54,20 +57,13 @@ export class ComfyUIGenerator {
         return images;
     }
 
-    /** 图片 URL（/view 端点） */
-    imageUrl(image: ComfyUIImage): string {
-        const params = new URLSearchParams({
-            filename: image.filename,
-            type: image.type ?? 'output',
-        });
-        if (image.subfolder) {
-            params.set('subfolder', image.subfolder);
-        }
-        return `${this.url}/view?${params.toString()}`;
+    /** 图片展示 URL（自动直连/代理） */
+    async imageUrl(image: ComfyUIImage): Promise<string> {
+        return imageDisplayUrl(this.url, image);
     }
 
     private async submit(workflow: AnimaWorkflow): Promise<string> {
-        const response = await fetch(`${this.url}/prompt`, {
+        const response = await comfyFetch(this.url, '/prompt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -90,7 +86,7 @@ export class ComfyUIGenerator {
     private async waitForResult(promptId: string): Promise<ComfyUIHistoryResponse> {
         const deadline = Date.now() + this.timeoutMs;
         while (Date.now() < deadline) {
-            const response = await fetch(`${this.url}/history/${promptId}`);
+            const response = await comfyFetch(this.url, `/history/${promptId}`);
             if (response.ok) {
                 const history = (await response.json()) as ComfyUIHistoryResponse;
                 if (history[promptId]) {

@@ -4,8 +4,10 @@ import type { StoryCharacter, StoryMessage } from './modules/extractor.js';
 import { extractMaterials } from './modules/extractor.js';
 import { TriggerController } from './modules/triggers.js';
 import { renderTemplate, buildParamPlaceholders } from './modules/workflow.js';
+import { generateWithLlm } from './modules/prompt-llm.js';
 import { loadWorkflow, fillPlaceholders, fillMissingParams, hasUnresolvedPlaceholders } from './modules/workflow-source.js';
 import { ComfyUIGenerator } from './modules/generator.js';
+import { resetProxyProbe } from './modules/comfy-fetch.js';
 import type { AnimaWorkflow } from './types/comfyui.js';
 
 const EXTENSION_NAME = 'st-illustrator';
@@ -27,7 +29,56 @@ export const defaultSettings = {
     modelUnet: '',
     modelClip: '',
     modelVae: '',
-    promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, @fkey, {appearance}, {scene}',
+    // === 提示词生成：显式选择 LLM / 规则模板，永不自动切换 ===
+    // promptMode: 'llm' | 'template'
+    promptMode: 'llm',
+    // LLM API（OpenAI 兼容）
+    llmBaseUrl: '',
+    llmApiKey: '',
+    llmModel: '',
+    // LLM 提示词模板：指导 LLM 如何从剧情提炼画面（{素材} 占位符）
+    // 融合 Anima 官方 README（混合提示词、tag order、反写实）与用户自定指令
+    llmTemplate: `你是 Anima 动漫提示词专家。Anima 是 CircleStone Labs 的 2B 参数动漫大模型，提示词逻辑与常规模型不同：它在「Danbooru 标签 + 连贯自然语言」的混合提示词风格下表现最强。
+
+根据剧情素材，为轻小说插画设计正向/负向提示词。输出 JSON：{"positive": "英文混合提示词", "negative": "英文负面反咒"}。只输出 JSON，不要任何解释。
+
+## positive 的构建规则
+
+1. 标签区开头：用 Danbooru 标签堆砌核心内容——角色、外貌特征、衣着、所属 IP。小写、空格分隔、不用下划线。**不要写质量标签、安全标签、人数、画师**（这些系统已前置，如 masterpiece, best quality, score_9, safe, 1girl, @fkey）。
+2. 自然语言区：紧接着写 2-4 句流畅且富有画面感的英文自然语言，详细扩写场景、光影、动态、情绪和氛围。**背景必须具体描述**——环境、光线方向、质感、天气，不要用「a beautiful background」这类抽象指代。突出动漫线条、赛璐珞或插画风光影。
+3. 场景必须贴合剧情素材，有故事感和构图感（可加 dynamic angle, cinematic lighting, low angle shot 等构图词）。
+4. 禁止写实词：photorealistic, 3d, realistic, octane render 等一律不得出现。
+
+## negative 的构建规则
+
+列出常见崩坏反咒，覆盖：解剖错误（bad anatomy, bad hands, bad feet, extra fingers, missing fingers）、画质问题（blurry, low quality, jpeg artifacts, watermark）、多余元素（text, signature, logo, censor bar）、安全约束（nsfw, explicit）。
+
+## 素材
+
+剧情场景：{scene}
+
+对话记录：
+{chat_history}
+
+角色：{character}
+外观：{appearance}`,
+    // 前后缀注入：LLM 结果外包一层（质量词/画师标签等，画师由用户决定）
+    llmPositivePrefix: 'masterpiece, best quality, score_9, safe, 1girl, ',
+    llmPositiveSuffix: ', @fkey',
+    llmNegativePrefix: 'worst quality, low quality, blurry, bad anatomy, bad hands, ',
+    llmNegativeSuffix: ', nsfw, explicit',
+    // === 素材提取上限（上下文控制） ===
+    /** 素材窗口：取最近多少条消息 */
+    sceneWindow: 6,
+    /** scene 素材最大字符数 */
+    sceneMaxLen: 120,
+    /** scene_full 素材最大字符数 */
+    sceneFullMaxLen: 500,
+    /** chat_history 素材最大字符数（喂给 LLM 的对话记录） */
+    chatHistoryMaxChars: 1500,
+    // 规则模板（生成方式选 template 时用）——Anima 官方 tag order（README:61-62）：
+    // [quality/meta/year/safety] [1girl] [character] [series] [artist] [general tags]
+    promptTemplate: 'masterpiece, best quality, score_9, score_8, highres, anime coloring, very aesthetic, safe, 1girl, {appearance}, @fkey, {scene}',
     negativeTemplate: 'worst quality, low quality, score_1, score_2, score_3, bad quality, worst detail, sketch, censor, extra limbs, deformed fingers, bad anatomy, mutated body, lowres, blurry, text, ugly, hooded eyes, watermark, pale, bad hands, bad anatomy, bad proportions, poorly drawn face, poorly drawn hand, missing finger, extra limbs, pixelated, distorted, jpeg artifacts, signature, (deformed:1.5), (bad hand:1.3), overexposed, underexposed, censored, mutated, extra finger, cloned face, bad eyes, nsfw, explicit',
     aspectRatio: '2:3',
     steps: 30,
@@ -51,7 +102,12 @@ let currentSettings: Settings = { ...defaultSettings };
  */
 function loadSettingsFromExtensionSettings(): void {
     const extensionSettings = getExtensionSettings();
+    const previousUrl = currentSettings.comfyUrl;
     currentSettings = { ...defaultSettings, ...extensionSettings };
+    if (previousUrl !== currentSettings.comfyUrl) {
+        // ComfyUI 地址变化时重置代理探测缓存
+        resetProxyProbe();
+    }
     trigger.updateConfig({
         enabled: currentSettings.enabled,
         autoMode: currentSettings.autoMode,
@@ -68,13 +124,7 @@ function getExtensionSettings(): Partial<Settings> {
 
 /**
  * 从设置自选的工作流构建可提交的 API 格式 workflow：
- * 1. 从 ComfyUI 读取工作流文件（UI 格式 → API 格式）
- * 2. 替换 %prompt% / %negative_prompt% / %sampler% / %scheduler% 占位符
- * 3. seed/steps/cfg/width/height 直接注入对应节点（模板中留空时）
- */
-/**
- * 从设置自选的工作流构建可提交的 API 格式 workflow：
- * 1. 提取素材（角色卡/剧情）
+ * 1. 提取素材（角色卡/剧情，可指定截至某条消息）
  * 2. 渲染用户模板（{素材} → 提示词）
  * 3. 从 ComfyUI 读取工作流（UI 格式 → API 格式）
  * 4. 替换工作流中的 %占位符%（prompt/negative_prompt/seed/steps/cfg/sampler/scheduler/width/height）
@@ -83,13 +133,54 @@ function getExtensionSettings(): Partial<Settings> {
 async function buildWorkflowFromSettings(
     character: StoryCharacter | undefined,
     chat: StoryMessage[],
+    options: { upToIndex?: number } = {},
 ): Promise<AnimaWorkflow> {
     const { workflow, defaultModels } = await loadWorkflow(currentSettings.comfyUrl, currentSettings.workflowFile);
 
-    // 素材 → 模板 → 提示词
-    const materials = extractMaterials(character, chat, { sceneWindow: 6, sceneMaxLen: 120 });
-    const prompt = renderTemplate(currentSettings.promptTemplate, materials);
-    const negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+    // 素材（upToIndex 指定时只取该消息及之前的剧情）
+    const materials = extractMaterials(character, chat, {
+        sceneWindow: currentSettings.sceneWindow,
+        sceneMaxLen: currentSettings.sceneMaxLen,
+        sceneFullMaxLen: currentSettings.sceneFullMaxLen,
+        chatHistoryMaxChars: currentSettings.chatHistoryMaxChars,
+        upToIndex: options.upToIndex,
+    });
+
+    // 提示词生成：按设置的「生成方式」显式选择，永不自动切换
+    let prompt: string;
+    let negativePrompt: string;
+    if (currentSettings.promptMode === 'llm') {
+        if (!currentSettings.llmBaseUrl || !currentSettings.llmModel) {
+            throw new Error('生成方式为 LLM，但 LLM 未配置（API 地址/模型名）——请到设置面板补全');
+        }
+        try {
+            const llmResult = await generateWithLlm({
+                client: {
+                    baseUrl: currentSettings.llmBaseUrl,
+                    apiKey: currentSettings.llmApiKey,
+                    model: currentSettings.llmModel,
+                },
+                template: currentSettings.llmTemplate,
+                positivePrefix: currentSettings.llmPositivePrefix,
+                positiveSuffix: currentSettings.llmPositiveSuffix,
+                negativePrefix: currentSettings.llmNegativePrefix,
+                negativeSuffix: currentSettings.llmNegativeSuffix,
+            }, materials);
+            prompt = llmResult.positive;
+            negativePrompt = llmResult.negative;
+        } catch (error) {
+            // 失败即报错：不降级，不静默换方案
+            console.error(`[${EXTENSION_NAME}] LLM 生成提示词失败:`, error);
+            throw new Error(`LLM 生成提示词失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    } else {
+        prompt = renderTemplate(currentSettings.promptTemplate, materials);
+        negativePrompt = renderTemplate(currentSettings.negativeTemplate, materials);
+    }
+
+    console.log(`[${EXTENSION_NAME}] === 最终提示词 ===`);
+    console.log(`[${EXTENSION_NAME}] positive:`, prompt);
+    console.log(`[${EXTENSION_NAME}] negative:`, negativePrompt);
 
     // 占位符值表：提示词 + 生成参数（含尺寸推算）
     const values: Record<string, string | number> = {
@@ -158,7 +249,8 @@ export async function generateIllustration(
     if (!options.force && !trigger.shouldAutoTrigger(messageIndex)) return false;
 
     const character = context.characters?.[context.characterId];
-    const workflow = await buildWorkflowFromSettings(character, context.chat);
+    // 素材截至目标消息：配图描述的是「那条消息当时」的场景
+    const workflow = await buildWorkflowFromSettings(character, context.chat, { upToIndex: messageIndex });
 
     console.log(`[${EXTENSION_NAME}] 生成配图（消息 ${messageIndex}）`);
 
@@ -166,21 +258,30 @@ export async function generateIllustration(
     if (images.length === 0) return false;
 
     // 把图插进目标消息
-    await insertImageIntoMessage(messageIndex, images[0].filename);
+    await insertImageIntoMessage(messageIndex, images[0]);
     trigger.markGenerated(messageIndex);
     await context.saveChat();
     return true;
 }
 
-async function insertImageIntoMessage(messageIndex: number, filename: string): Promise<void> {
+/**
+ * 为指定消息配图（消息菜单按钮入口）。
+ * 绕过启用/触发检查：用户明确点按钮就是要配图。
+ */
+export async function illustrateMessage(messageIndex: number): Promise<boolean> {
+    return generateIllustration(messageIndex, { force: true, bypassEnabled: true });
+}
+
+async function insertImageIntoMessage(messageIndex: number, image: { filename: string; type?: string; subfolder?: string }): Promise<void> {
     const { appendMediaToMessage } = await import('st/script');
+    const { imageDisplayUrl } = await import('./modules/comfy-fetch.js');
     const context = getContext() as {
         chat: StoryMessage[];
     };
     const message = context.chat[messageIndex];
     if (!message) return;
 
-    const url = `${currentSettings.comfyUrl}/view?filename=${encodeURIComponent(filename)}&type=output`;
+    const url = await imageDisplayUrl(currentSettings.comfyUrl, image);
     const mediaAttachment = {
         url,
         type: 'image',
@@ -195,9 +296,13 @@ async function insertImageIntoMessage(messageIndex: number, filename: string): P
     messageExtra.inline_image = true;
     message.extra = messageExtra;
 
+    console.log(`[${EXTENSION_NAME}] 插入配图到消息 ${messageIndex}`, { url, mediaCount: media.length });
+
     const messageElement = document.querySelector(`.mes[mesid="${messageIndex}"]`);
     if (messageElement) {
-        appendMediaToMessage(message, messageElement as never, 'keep');
+        appendMediaToMessage(message, $(messageElement), 'keep');
+    } else {
+        console.warn(`[${EXTENSION_NAME}] 消息 ${messageIndex} 的 DOM 元素未找到，图片已保存到消息数据但未渲染（刷新页面可见）`);
     }
 }
 
@@ -221,6 +326,10 @@ export async function init(): Promise<void> {
     loadSettingsFromExtensionSettings();
     eventSource.on(event_types.EXTENSION_SETTINGS_LOADED, loadSettingsFromExtensionSettings);
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+
+    // 消息菜单配图按钮（渲染事件注入 + 点击委托）
+    const { initMessageButtons } = await import('./modules/message-buttons.js');
+    initMessageButtons();
 
     // 设置面板等 DOM 就绪后再渲染（ST 扩展加载早于 DOM 完成）
     const { addSettingsUI } = await import('./modules/ui.js');

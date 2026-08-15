@@ -48,7 +48,44 @@
 
             <hr>
 
-            <h4>提示词模板</h4>
+            <h4>LLM 提示词生成（剧情 → 画面描述）</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_prompt_mode">生成方式</label>
+                <select id="sti_prompt_mode" class="text_pole">
+                    <option value="llm">LLM（剧情 → 画面描述）</option>
+                    <option value="template">规则模板（不调 LLM）</option>
+                </select>
+                <div class="muted small">显式选择，不会自动切换。选 LLM 时失败会直接报错，不会偷偷改用模板</div>
+
+                <label for="sti_llm_base_url">API 地址（OpenAI 兼容，如 http://127.0.0.1:11434/v1）</label>
+                <input id="sti_llm_base_url" type="text" class="text_pole">
+
+                <label for="sti_llm_api_key">API Key（本地服务可留空）</label>
+                <input id="sti_llm_api_key" type="text" class="text_pole">
+
+                <label for="sti_llm_model">模型名</label>
+                <input id="sti_llm_model" type="text" class="text_pole">
+
+                <label for="sti_llm_template">LLM 提示词模板</label>
+                <textarea id="sti_llm_template" class="text_pole" rows="6"></textarea>
+                <div class="muted small">可用 {character} {appearance} {personality} {scenario} {scene} 或 {materials}（完整 JSON）</div>
+
+                <label for="sti_llm_positive_prefix">正面前缀（注入 LLM 结果开头）</label>
+                <input id="sti_llm_positive_prefix" type="text" class="text_pole">
+
+                <label for="sti_llm_positive_suffix">正面后缀（注入 LLM 结果结尾）</label>
+                <input id="sti_llm_positive_suffix" type="text" class="text_pole">
+
+                <label for="sti_llm_negative_prefix">负面前缀</label>
+                <input id="sti_llm_negative_prefix" type="text" class="text_pole">
+
+                <label for="sti_llm_negative_suffix">负面后缀</label>
+                <input id="sti_llm_negative_suffix" type="text" class="text_pole">
+            </div>
+
+            <hr>
+
+            <h4>提示词模板（LLM 降级方案）</h4>
             <div class="flex-container flexFlowColumn wide100p">
                 <label for="sti_prompt_template">正面模板</label>
                 <textarea id="sti_prompt_template" class="text_pole" rows="3"></textarea>
@@ -56,6 +93,23 @@
 
                 <label for="sti_negative_template">负面模板</label>
                 <textarea id="sti_negative_template" class="text_pole" rows="3"></textarea>
+            </div>
+
+            <hr>
+
+            <h4>素材上限（上下文控制）</h4>
+            <div class="flex-container flexFlowColumn wide100p">
+                <label for="sti_scene_window">素材窗口（取最近多少条消息）</label>
+                <input id="sti_scene_window" type="number" min="1" max="50" class="text_pole">
+
+                <label for="sti_scene_max_len">scene 最大字符数</label>
+                <input id="sti_scene_max_len" type="number" min="0" max="5000" class="text_pole">
+
+                <label for="sti_scene_full_max_len">scene_full 最大字符数</label>
+                <input id="sti_scene_full_max_len" type="number" min="0" max="10000" class="text_pole">
+
+                <label for="sti_chat_history_max_chars">chat_history 最大字符数（喂给 LLM 的对话记录）</label>
+                <input id="sti_chat_history_max_chars" type="number" min="0" max="20000" class="text_pole">
             </div>
 
             <hr>
@@ -87,7 +141,7 @@
                 <label for="sti_cfg">CFG</label>
                 <input id="sti_cfg" type="number" min="0.5" max="15" step="0.5" class="text_pole">
 
-                <label for="sti_seed">种子（-1 随机）</label>
+                <label for="sti_seed">种子（0 以上固定，负数随机）</label>
                 <input id="sti_seed" type="number" class="text_pole">
 
                 <label for="sti_sampler_name">采样器</label>

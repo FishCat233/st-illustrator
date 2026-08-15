@@ -34,6 +34,8 @@ export interface StoryMaterials {
     scene: string;
     /** 最近剧情原文（更长，可自行截断） */
     scene_full: string;
+    /** 最近对话记录（带说话人，用户+角色交替，供 LLM 理解剧情） */
+    chat_history: string;
 }
 
 /** 角色卡描述 → 外观素材（取前 2 句） */
@@ -60,15 +62,52 @@ export function extractScene(chat: StoryMessage[], window: number, maxLen: numbe
     return '';
 }
 
+/** 最近剧情 → 对话记录素材（带说话人，供 LLM 理解剧情） */
+export function extractChatHistory(chat: StoryMessage[], window: number, maxChars: number): string {
+    if (!chat || chat.length === 0) return '';
+    const recent = chat.slice(-window);
+    const lines: string[] = [];
+    let total = 0;
+
+    for (const mes of recent) {
+        const text = mes?.mes?.trim();
+        if (!text) continue;
+        const speaker = mes.is_user ? 'User' : (mes.name || 'Character');
+        const line = `${speaker}: ${text}`;
+        total += line.length;
+        if (total > maxChars && lines.length > 0) break;
+        lines.push(line);
+    }
+
+    return lines.join('\n');
+}
+
 /** 从角色卡 + 剧情提取全部素材 */
+export interface ExtractMaterialsConfig {
+    /** 素材窗口：取最近多少条消息（默认 6） */
+    sceneWindow?: number;
+    /** scene 素材最大字符数（默认 120） */
+    sceneMaxLen?: number;
+    /** scene_full 素材最大字符数（默认 500） */
+    sceneFullMaxLen?: number;
+    /** chat_history 素材最大字符数（默认 1500） */
+    chatHistoryMaxChars?: number;
+    /** 指定截至某条消息（回顾式配图） */
+    upToIndex?: number;
+}
+
 export function extractMaterials(
     character: StoryCharacter | undefined,
     chat: StoryMessage[],
-    config: { sceneWindow?: number; sceneMaxLen?: number } = {},
+    config: ExtractMaterialsConfig = {},
 ): StoryMaterials {
     const window = config.sceneWindow ?? 6;
     const maxLen = config.sceneMaxLen ?? 120;
-    const sceneFull = extractScene(chat, window, 500);
+    const sceneFullMaxLen = config.sceneFullMaxLen ?? 500;
+    const chatHistoryMaxChars = config.chatHistoryMaxChars ?? 1500;
+    // 指定截至某条消息时，只取该消息及之前的剧情（回顾式配图）
+    const context = config.upToIndex !== undefined ? chat.slice(0, config.upToIndex + 1) : chat;
+    const sceneFull = extractScene(context, window, sceneFullMaxLen);
 
     return {
         character: character?.name?.trim() ?? '',
@@ -77,5 +116,6 @@ export function extractMaterials(
         scenario: character?.scenario?.trim() ?? '',
         scene: sceneFull.slice(0, maxLen),
         scene_full: sceneFull,
+        chat_history: extractChatHistory(context, window, chatHistoryMaxChars),
     };
 }
