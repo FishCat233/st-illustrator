@@ -217,7 +217,7 @@ export function fillMissingParams(
 
 function defaultNumber(key: string): number {
     switch (key) {
-        case 'seed': return -1;
+        case 'seed': return Math.floor(Math.random() * 4_294_967_295);
         case 'steps': return 30;
         case 'cfg': return 4;
         case 'denoise': return 1;
